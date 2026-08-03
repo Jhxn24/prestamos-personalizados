@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(curl *)",
+      "Bash(npm test *)",
+      "Bash(node --test tests/pagos/flujoPagos.test.js)",
+      "Bash(node --test tests/motor-calculo/)",
+      "Bash(node --test tests/pagos/moraYAnticipado.test.js)",
+      "Bash(node --test tests/motor-calculo/cuotasFijas.test.js)",
+      "Bash(node --test tests/pagos/abonoExtraordinario.test.js)"
+    ]
+  }
+}

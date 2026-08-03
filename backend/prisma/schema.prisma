@@ -1,0 +1,260 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ADMINISTRADOR
+  CLIENTE
+}
+
+model Usuario {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  rol       Rol
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cliente   Cliente?
+
+  pagosRegistrados Pago[] @relation("PagosRegistrados")
+  pagosConfirmados Pago[] @relation("PagosConfirmados")
+}
+
+model Cliente {
+  id        String   @id @default(uuid())
+  nombre    String
+  apellido  String
+  documento String   @unique
+  telefono  String?
+  direccion String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  usuarioId String   @unique
+
+  prestamos Prestamo[]
+}
+
+enum ModalidadPrestamo {
+  INTERES_FIJO
+  INTERES_SOBRE_SALDO
+  CUOTAS_FIJAS
+}
+
+enum TipoInteres {
+  DIARIO
+  MENSUAL
+  ANUAL
+}
+
+enum FrecuenciaPago {
+  DIARIA
+  SEMANAL
+  QUINCENAL
+  MENSUAL
+  BIMESTRAL
+  TRIMESTRAL
+  PERSONALIZADA
+}
+
+enum EstadoPrestamo {
+  ACTIVO
+  PAGADO
+  REFINANCIADO
+  CANCELADO
+}
+
+// RF-16: qué hacer cuando una cuota vence sin pagarse.
+enum PoliticaMora {
+  NINGUNA       // la cuota se marca vencida, sin cargo
+  EXTENSION_DIA // se corre el vencimiento un día, una sola vez
+  COBRO_DOBLE   // sin recargo: la deuda se acumula para la siguiente fecha
+  MORA          // recargo diario sobre el capital pendiente de la cuota
+}
+
+// RF-14: cómo cobrar el interés cuando la cuota se paga antes de vencer.
+enum PoliticaInteresAnticipado {
+  COMPLETO     // interés íntegro del periodo
+  PROPORCIONAL // solo el interés devengado hasta la fecha de pago
+}
+
+// RF-17: qué hacer con un abono superior a la cuota programada.
+enum PoliticaAbonoExtraordinario {
+  REDUCIR_CUOTA // se mantiene el número de cuotas y baja su importe
+  REDUCIR_PLAZO // se mantiene el importe de la cuota y hacen falta menos
+}
+
+enum EstadoCuota {
+  PENDIENTE
+  PARCIAL
+  PAGADA
+  VENCIDA
+}
+
+model Prestamo {
+  id       String @id @default(uuid())
+  cliente  Cliente @relation(fields: [clienteId], references: [id])
+  clienteId String
+
+  // Condiciones pactadas (RF-05, RF-06, RF-07)
+  capital            Decimal           @db.Decimal(14, 2)
+  tasaInteres        Decimal           @db.Decimal(9, 6)
+  tipoInteres        TipoInteres
+  frecuenciaPago     FrecuenciaPago
+  diasPersonalizados Int?
+  numeroCuotas       Int
+  modalidad          ModalidadPrestamo
+  fechaDesembolso    DateTime
+
+  // Política de atraso pactada (RF-16). tasaMora es un % DIARIO sobre el
+  // capital pendiente de la cuota vencida.
+  politicaMora PoliticaMora @default(NINGUNA)
+  tasaMora     Decimal      @db.Decimal(9, 6) @default(0)
+  diasGracia   Int          @default(0)
+
+  // Estado vivo del préstamo (RF-10)
+  capitalPendiente Decimal        @db.Decimal(14, 2)
+  interesAcumulado Decimal        @db.Decimal(14, 2) @default(0)
+  moraAcumulada    Decimal        @db.Decimal(14, 2) @default(0)
+  estado           EstadoPrestamo @default(ACTIVO)
+
+  // Refinanciamiento (RF-08): un préstamo puede nacer del saldo de otro
+  prestamoOrigen    Prestamo?  @relation("Refinanciamiento", fields: [prestamoOrigenId], references: [id])
+  prestamoOrigenId  String?
+  refinanciamientos Prestamo[] @relation("Refinanciamiento")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cuotas Cuota[]
+  pagos  Pago[]
+
+  @@index([clienteId])
+}
+
+model Cuota {
+  id         String   @id @default(uuid())
+  prestamo   Prestamo @relation(fields: [prestamoId], references: [id], onDelete: Cascade)
+  prestamoId String
+
+  numero           Int
+  fechaVencimiento DateTime
+  capital          Decimal @db.Decimal(14, 2)
+  interes          Decimal @db.Decimal(14, 2)
+  total            Decimal @db.Decimal(14, 2)
+  // Capital que queda pendiente DESPUÉS de pagar esta cuota
+  saldoCapital     Decimal @db.Decimal(14, 2)
+
+  // Desglose de lo cobrado: el negocio necesita saber cuánto de lo pagado fue
+  // interés (ganancia) y cuánto capital (recuperación), no solo el total.
+  capitalPagado Decimal     @db.Decimal(14, 2) @default(0)
+  interesPagado Decimal     @db.Decimal(14, 2) @default(0)
+  montoPagado   Decimal     @db.Decimal(14, 2) @default(0)
+  estado        EstadoCuota @default(PENDIENTE)
+
+  // Atraso y mora (RF-16). `mora` es el total devengado a la fecha, no un
+  // acumulador: se recalcula entero en cada refresco.
+  mora              Decimal  @db.Decimal(14, 2) @default(0)
+  moraPagada        Decimal  @db.Decimal(14, 2) @default(0)
+  diasAtraso        Int      @default(0)
+  extensionAplicada Boolean  @default(false)
+  moraCalculadaEn   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pagos Pago[]
+
+  @@unique([prestamoId, numero])
+  @@index([prestamoId])
+}
+
+enum EstadoPago {
+  PENDIENTE_CONFIRMACION
+  CONFIRMADO
+  RECHAZADO
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TRANSFERENCIA
+  DEPOSITO
+  YAPE_PLIN
+  OTRO
+}
+
+model Pago {
+  id         String   @id @default(uuid())
+  prestamo   Prestamo @relation(fields: [prestamoId], references: [id], onDelete: Cascade)
+  prestamoId String
+  cuota      Cuota?   @relation(fields: [cuotaId], references: [id])
+  cuotaId    String?
+
+  monto  Decimal    @db.Decimal(14, 2)
+  metodo MetodoPago @default(EFECTIVO)
+
+  // Cómo se repartió el pago. Solo se llena al CONFIRMAR: un pago reportado
+  // pero no confirmado no debe tocar la contabilidad del préstamo (RF-22).
+  moraAplicada    Decimal @db.Decimal(14, 2) @default(0)
+  capitalAplicado Decimal @db.Decimal(14, 2) @default(0)
+  interesAplicado Decimal @db.Decimal(14, 2) @default(0)
+  excedente       Decimal @db.Decimal(14, 2) @default(0)
+
+  // RF-14: decisión del administrador sobre el interés en un pago anticipado,
+  // y cuánto interés se dejó de cobrar por prorratearlo (para auditoría).
+  politicaInteresAnticipado PoliticaInteresAnticipado @default(COMPLETO)
+  interesCondonado          Decimal                   @db.Decimal(14, 2) @default(0)
+
+  // RF-17: decisión del administrador sobre el excedente, y cuántas cuotas se
+  // eliminaron del cronograma al acortar el plazo.
+  politicaAbonoExtraordinario PoliticaAbonoExtraordinario @default(REDUCIR_CUOTA)
+  cuotasEliminadas            Int                         @default(0)
+
+  estado         EstadoPago @default(PENDIENTE_CONFIRMACION)
+  comprobanteUrl String?
+  observaciones  String?
+  motivoRechazo  String?
+
+  fechaPago         DateTime  @default(now())
+  fechaConfirmacion DateTime?
+
+  // Auditoría mínima (RNF-12): quién reportó el pago y quién lo resolvió.
+  registradoPor   Usuario  @relation("PagosRegistrados", fields: [registradoPorId], references: [id])
+  registradoPorId String
+  confirmadoPor   Usuario? @relation("PagosConfirmados", fields: [confirmadoPorId], references: [id])
+  confirmadoPorId String?
+
+  recibo Recibo?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([prestamoId])
+  @@index([estado])
+}
+
+// RF-24: se emite automáticamente al confirmar un pago.
+model Recibo {
+  id     String @id @default(uuid())
+  numero Int    @unique @default(autoincrement())
+
+  pago   Pago   @relation(fields: [pagoId], references: [id], onDelete: Cascade)
+  pagoId String @unique
+
+  monto        Decimal  @db.Decimal(14, 2)
+  fechaEmision DateTime @default(now())
+
+  createdAt DateTime @default(now())
+}
