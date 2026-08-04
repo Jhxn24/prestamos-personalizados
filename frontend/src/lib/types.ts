@@ -14,6 +14,42 @@ export interface LoginResponse {
   usuario: Usuario;
 }
 
+/** GET/POST/PUT /api/clientes — clienteDTO en backend/clientes.dto.js. */
+export interface Cliente {
+  id: string;
+  nombre: string;
+  apellido: string;
+  documento: string;
+  telefono: string | null;
+  direccion: string | null;
+  activo: boolean;
+  email: string;
+}
+
+/** Body de POST /api/clientes. El backend crea la cuenta de usuario asociada. */
+export interface CrearClienteInput {
+  nombre: string;
+  apellido: string;
+  documento: string;
+  email: string;
+  password: string;
+  telefono?: string;
+  direccion?: string;
+}
+
+/**
+ * Body de PUT /api/clientes/:id. El backend solo acepta estos 5 campos
+ * (clientes.service.js:actualizarCliente) — email y password no son editables
+ * por esta vía.
+ */
+export interface ActualizarClienteInput {
+  nombre: string;
+  apellido: string;
+  documento: string;
+  telefono?: string;
+  direccion?: string;
+}
+
 export interface ProximoCobro {
   prestamoId: string;
   cuotaId: string;
