@@ -6,6 +6,7 @@ const authRoutes = require('./routes/auth.routes');
 const clientesRoutes = require('./routes/clientes.routes');
 const prestamosRoutes = require('./routes/prestamos.routes');
 const pagosRoutes = require('./routes/pagos.routes');
+const dashboardRoutes = require('./routes/dashboard.routes');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
@@ -17,6 +18,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/prestamos', prestamosRoutes);
 app.use('/api/pagos', pagosRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.use(errorHandler);
 

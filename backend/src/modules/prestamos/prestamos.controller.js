@@ -1,6 +1,7 @@
 const prisma = require('../../config/prisma');
 const prestamosService = require('./prestamos.service');
 const { refrescarMora } = require('../mora/mora.service');
+const { prestamoDTO, cuotaDTO } = require('./prestamos.dto');
 
 /**
  * RNF-05: un cliente solo puede ver sus propios préstamos. Resuelve el
@@ -20,7 +21,7 @@ async function listar(req, res, next) {
   try {
     const clienteId = await clienteIdDelUsuario(req.usuario);
     const prestamos = await prestamosService.listarPrestamos(clienteId ? { clienteId } : {});
-    res.json(prestamos);
+    res.json(prestamos.map(prestamoDTO));
   } catch (error) {
     next(error);
   }
@@ -38,7 +39,7 @@ async function obtener(req, res, next) {
       return res.status(403).json({ error: 'No tienes acceso a este préstamo' });
     }
 
-    res.json(prestamo);
+    res.json(prestamoDTO(prestamo));
   } catch (error) {
     next(error);
   }
@@ -57,7 +58,7 @@ async function cronograma(req, res, next) {
       return res.status(403).json({ error: 'No tienes acceso a este préstamo' });
     }
 
-    res.json(prestamo.cuotas);
+    res.json(prestamo.cuotas.map(cuotaDTO));
   } catch (error) {
     next(error);
   }
@@ -84,7 +85,7 @@ async function crear(req, res, next) {
     }
 
     const prestamo = await prestamosService.crearPrestamo(req.body);
-    res.status(201).json(prestamo);
+    res.status(201).json(prestamoDTO(prestamo));
   } catch (error) {
     next(error);
   }
@@ -106,7 +107,7 @@ async function recalcular(req, res, next) {
     if (!prestamo) {
       return res.status(404).json({ error: 'Préstamo no encontrado' });
     }
-    res.json(prestamo);
+    res.json(prestamoDTO(prestamo));
   } catch (error) {
     next(error);
   }
@@ -118,7 +119,7 @@ async function refinanciar(req, res, next) {
     if (!prestamo) {
       return res.status(404).json({ error: 'Préstamo no encontrado' });
     }
-    res.status(201).json(prestamo);
+    res.status(201).json(prestamoDTO(prestamo));
   } catch (error) {
     next(error);
   }
@@ -135,7 +136,7 @@ async function actualizarMora(req, res, next) {
       return res.status(404).json({ error: 'Préstamo no encontrado' });
     }
 
-    res.json(prestamo);
+    res.json(prestamoDTO(prestamo));
   } catch (error) {
     next(error);
   }

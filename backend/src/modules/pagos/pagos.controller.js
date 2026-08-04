@@ -1,5 +1,6 @@
 const prisma = require('../../config/prisma');
 const pagosService = require('./pagos.service');
+const { pagoDTO } = require('./pagos.dto');
 
 const ERRORES_HTTP = {
   CUOTA_NO_ENCONTRADA: [404, 'Cuota no encontrada'],
@@ -34,7 +35,7 @@ async function registrar(req, res, next) {
       return responderError(res, error);
     }
 
-    res.status(201).json(pago);
+    res.status(201).json(pagoDTO(pago));
   } catch (error) {
     next(error);
   }
@@ -48,7 +49,7 @@ async function listar(req, res, next) {
       estado: req.query.estado,
       prestamoId: req.query.prestamoId,
     });
-    res.json(pagos);
+    res.json(pagos.map(pagoDTO));
   } catch (error) {
     next(error);
   }
@@ -66,7 +67,7 @@ async function obtener(req, res, next) {
       return responderError(res, 'SIN_ACCESO');
     }
 
-    res.json(pago);
+    res.json(pagoDTO(pago));
   } catch (error) {
     next(error);
   }
@@ -82,7 +83,7 @@ async function confirmar(req, res, next) {
     if (error) {
       return responderError(res, error);
     }
-    res.json(pago);
+    res.json(pagoDTO(pago));
   } catch (error) {
     next(error);
   }
@@ -99,7 +100,7 @@ async function rechazar(req, res, next) {
     if (error) {
       return responderError(res, error);
     }
-    res.json(pago);
+    res.json(pagoDTO(pago));
   } catch (error) {
     next(error);
   }

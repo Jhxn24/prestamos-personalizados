@@ -1,9 +1,10 @@
 const clientesService = require('./clientes.service');
+const { clienteDTO } = require('./clientes.dto');
 
 async function listar(req, res, next) {
   try {
     const clientes = await clientesService.listarClientes();
-    res.json(clientes);
+    res.json(clientes.map(clienteDTO));
   } catch (error) {
     next(error);
   }
@@ -15,7 +16,7 @@ async function obtener(req, res, next) {
     if (!cliente) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
-    res.json(cliente);
+    res.json(clienteDTO(cliente));
   } catch (error) {
     next(error);
   }
@@ -31,7 +32,7 @@ async function crear(req, res, next) {
     }
 
     const cliente = await clientesService.crearCliente(req.body);
-    res.status(201).json(cliente);
+    res.status(201).json(clienteDTO(cliente));
   } catch (error) {
     next(error);
   }
@@ -40,7 +41,7 @@ async function crear(req, res, next) {
 async function actualizar(req, res, next) {
   try {
     const cliente = await clientesService.actualizarCliente(req.params.id, req.body);
-    res.json(cliente);
+    res.json(clienteDTO(cliente));
   } catch (error) {
     next(error);
   }
@@ -49,7 +50,7 @@ async function actualizar(req, res, next) {
 async function desactivar(req, res, next) {
   try {
     const cliente = await clientesService.desactivarCliente(req.params.id);
-    res.json(cliente);
+    res.json(clienteDTO(cliente));
   } catch (error) {
     next(error);
   }
