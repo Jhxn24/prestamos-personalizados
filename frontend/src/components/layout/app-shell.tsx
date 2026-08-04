@@ -19,16 +19,19 @@ export function AppShell({ usuario, onLogout, children }: AppShellProps) {
           <Badge variant="secondary">
             {usuario.rol === "ADMINISTRADOR" ? "Administrador" : "Cliente"}
           </Badge>
-          {usuario.rol === "ADMINISTRADOR" && (
-            <nav className="flex items-center gap-4 text-sm">
-              <Link href="/dashboard" className="text-muted-foreground hover:text-foreground">
-                Dashboard
-              </Link>
+          <nav className="flex items-center gap-4 text-sm">
+            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground">
+              Dashboard
+            </Link>
+            <Link href="/prestamos" className="text-muted-foreground hover:text-foreground">
+              Préstamos
+            </Link>
+            {usuario.rol === "ADMINISTRADOR" && (
               <Link href="/clientes" className="text-muted-foreground hover:text-foreground">
                 Clientes
               </Link>
-            </nav>
-          )}
+            )}
+          </nav>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground">{usuario.email}</span>

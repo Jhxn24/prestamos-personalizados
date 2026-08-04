@@ -95,6 +95,15 @@ export function ClienteDetalle({ id }: { id: string }) {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          {cliente.activo && (
+            <Button
+              variant="outline"
+              render={<Link href={`/prestamos/nuevo?clienteId=${cliente.id}`} />}
+              nativeButton={false}
+            >
+              Registrar préstamo
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setSheetAbierto(true)}>
             Editar
           </Button>

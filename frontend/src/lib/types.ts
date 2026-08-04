@@ -116,3 +116,99 @@ export interface DashboardClientePrestamo {
 
 /** GET /api/dashboard cuando el token es de un CLIENTE: un préstamo propio por entrada. */
 export type DashboardCliente = DashboardClientePrestamo[];
+
+export type TipoInteres = "DIARIO" | "MENSUAL" | "ANUAL";
+export type FrecuenciaPago =
+  | "DIARIA"
+  | "SEMANAL"
+  | "QUINCENAL"
+  | "MENSUAL"
+  | "BIMESTRAL"
+  | "TRIMESTRAL"
+  | "PERSONALIZADA";
+
+interface ClienteResumen {
+  id: string;
+  nombre: string;
+  apellido: string;
+  documento: string;
+}
+
+/** Cuota tal como la persiste el backend (prestamos.dto.js:cuotaDTO). */
+export interface CuotaPrestamo {
+  id: string;
+  numero: number;
+  fechaVencimiento: string;
+  capital: string;
+  interes: string;
+  total: string;
+  saldoCapital: string;
+  capitalPagado: string;
+  interesPagado: string;
+  montoPagado: string;
+  mora: string;
+  moraPagada: string;
+  diasAtraso: number;
+  extensionAplicada: boolean;
+  estado: EstadoCuota;
+}
+
+/** GET/POST /api/prestamos — prestamos.dto.js:prestamoDTO. */
+export interface Prestamo {
+  id: string;
+  cliente: ClienteResumen | null;
+  capital: string;
+  capitalPendiente: string;
+  interesAcumulado: string;
+  moraAcumulada: string;
+  tasaInteres: string;
+  tipoInteres: TipoInteres;
+  frecuenciaPago: FrecuenciaPago;
+  diasPersonalizados: number | null;
+  numeroCuotas: number;
+  modalidad: ModalidadPrestamo;
+  fechaDesembolso: string;
+  estado: EstadoPrestamo;
+  politicaMora: string;
+  tasaMora: string;
+  diasGracia: number;
+  prestamoOrigenId: string | null;
+  cuotas: CuotaPrestamo[];
+}
+
+/** Body de POST /api/prestamos/simular y de POST /api/prestamos (sin clienteId). */
+export interface SimularPrestamoInput {
+  capital: number;
+  tasaInteres: number;
+  tipoInteres: TipoInteres;
+  frecuenciaPago: FrecuenciaPago;
+  diasPersonalizados?: number;
+  numeroCuotas: number;
+  modalidad: ModalidadPrestamo;
+  fechaDesembolso: string;
+}
+
+export interface CrearPrestamoInput extends SimularPrestamoInput {
+  clienteId: string;
+}
+
+export interface CuotaSimulada {
+  numero: number;
+  fechaVencimiento: string;
+  capital: string;
+  interes: string;
+  total: string;
+  saldoCapital: string;
+}
+
+/** Respuesta de POST /api/prestamos/simular: previsualización, no persiste nada. */
+export interface SimularPrestamoResponse {
+  tasaPorCuota: string;
+  resumen: {
+    totalCapital: string;
+    totalInteres: string;
+    totalAPagar: string;
+    numeroCuotas: number;
+  };
+  cuotas: CuotaSimulada[];
+}
