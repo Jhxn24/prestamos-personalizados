@@ -1,3 +1,6 @@
+# Documentación local (no versionada)
+/*.md
+
 # Dependencies
 node_modules/
 
