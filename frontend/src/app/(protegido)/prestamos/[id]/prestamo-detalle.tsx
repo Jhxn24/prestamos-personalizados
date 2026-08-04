@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { obtenerPrestamo } from "@/lib/prestamos-api";
@@ -16,6 +17,7 @@ import { RegistrarPagoSheet } from "@/components/pagos/registrar-pago-sheet";
 import { ConfirmarPagoDialog } from "@/components/pagos/confirmar-pago-dialog";
 import { RechazarPagoDialog } from "@/components/pagos/rechazar-pago-dialog";
 import { VerDesglosePagoDialog } from "@/components/pagos/ver-desglose-pago-dialog";
+import { AjustarPrestamoSheet } from "@/components/prestamos/ajustar-prestamo-sheet";
 
 const MODALIDAD_LABEL: Record<string, string> = {
   INTERES_FIJO: "Interés fijo",
@@ -52,6 +54,7 @@ function formatearFecha(iso: string) {
 
 export function PrestamoDetalle({ id }: { id: string }) {
   const { token, usuario } = useAuth();
+  const router = useRouter();
   const esAdministrador = usuario?.rol === "ADMINISTRADOR";
 
   const [prestamo, setPrestamo] = useState<Prestamo | null>(null);
@@ -63,6 +66,7 @@ export function PrestamoDetalle({ id }: { id: string }) {
   const [pagoDesglose, setPagoDesglose] = useState<Pago | null>(null);
   const [pagoConfirmar, setPagoConfirmar] = useState<Pago | null>(null);
   const [pagoRechazar, setPagoRechazar] = useState<Pago | null>(null);
+  const [modoAjuste, setModoAjuste] = useState<"recalcular" | "refinanciar" | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -137,15 +141,44 @@ export function PrestamoDetalle({ id }: { id: string }) {
 
   if (!prestamo) return null;
 
+  const puedeRecalcular =
+    prestamo.estado === "ACTIVO" && prestamo.cuotas.every((cuota) => Number(cuota.montoPagado) === 0);
+  const puedeRefinanciar = prestamo.estado === "ACTIVO" && Number(prestamo.capitalPendiente) > 0;
+
+  async function alAjustar(resultado: Prestamo) {
+    if (modoAjuste === "refinanciar") {
+      router.push(`/prestamos/${resultado.id}`);
+    } else {
+      setPrestamo(resultado);
+    }
+    setModoAjuste(null);
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <Link href="/prestamos" className="text-sm text-muted-foreground hover:underline">
-          ← Préstamos
-        </Link>
-        <h1 className="text-xl font-semibold">
-          {MODALIDAD_LABEL[prestamo.modalidad] ?? prestamo.modalidad}
-        </h1>
+      <div className="flex items-center justify-between">
+        <div>
+          <Link href="/prestamos" className="text-sm text-muted-foreground hover:underline">
+            ← Préstamos
+          </Link>
+          <h1 className="text-xl font-semibold">
+            {MODALIDAD_LABEL[prestamo.modalidad] ?? prestamo.modalidad}
+          </h1>
+        </div>
+        {esAdministrador && (puedeRecalcular || puedeRefinanciar) && (
+          <div className="flex items-center gap-2">
+            {puedeRecalcular && (
+              <Button variant="outline" size="sm" onClick={() => setModoAjuste("recalcular")}>
+                Recalcular
+              </Button>
+            )}
+            {puedeRefinanciar && (
+              <Button variant="outline" size="sm" onClick={() => setModoAjuste("refinanciar")}>
+                Refinanciar
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <Card>
@@ -204,6 +237,17 @@ export function PrestamoDetalle({ id }: { id: string }) {
                 {Number(prestamo.tasaMora) > 0 ? ` · ${prestamo.tasaMora}% diario` : ""}
                 {prestamo.diasGracia > 0 ? ` · ${prestamo.diasGracia} días de gracia` : ""}
               </p>
+            </div>
+          )}
+          {prestamo.prestamoOrigenId && (
+            <div className="col-span-2 sm:col-span-4">
+              <p className="text-sm text-muted-foreground">Origen</p>
+              <Link
+                href={`/prestamos/${prestamo.prestamoOrigenId}`}
+                className="font-medium hover:underline"
+              >
+                Refinanciado de otro préstamo →
+              </Link>
             </div>
           )}
         </CardContent>
@@ -285,6 +329,13 @@ export function PrestamoDetalle({ id }: { id: string }) {
         onOpenChange={(open) => !open && setPagoRechazar(null)}
         pago={pagoRechazar}
         onSuccess={recargar}
+      />
+      <AjustarPrestamoSheet
+        open={modoAjuste !== null}
+        onOpenChange={(open) => !open && setModoAjuste(null)}
+        modo={modoAjuste ?? "recalcular"}
+        prestamo={prestamo}
+        onSuccess={alAjustar}
       />
     </div>
   );

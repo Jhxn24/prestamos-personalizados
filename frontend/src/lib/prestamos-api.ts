@@ -25,3 +25,28 @@ export function crearPrestamo(token: string, datos: CrearPrestamoInput) {
     body: JSON.stringify(datos),
   });
 }
+
+/**
+ * RF-09: reemplaza el cronograma pendiente. Solo válido sobre un préstamo
+ * ACTIVO sin pagos aplicados — el backend rechaza el resto con un mensaje
+ * claro (ApiError.message ya trae el motivo).
+ */
+export function recalcularPrestamo(token: string, id: string, ajustes: SimularPrestamoInput) {
+  return apiFetch<Prestamo>(`/api/prestamos/${id}/recalcular`, {
+    token,
+    method: "POST",
+    body: JSON.stringify(ajustes),
+  });
+}
+
+/**
+ * RF-08: cierra el préstamo actual (queda REFINANCIADO) y devuelve uno
+ * nuevo por el saldo pendiente.
+ */
+export function refinanciarPrestamo(token: string, id: string, condiciones: SimularPrestamoInput) {
+  return apiFetch<Prestamo>(`/api/prestamos/${id}/refinanciar`, {
+    token,
+    method: "POST",
+    body: JSON.stringify(condiciones),
+  });
+}
