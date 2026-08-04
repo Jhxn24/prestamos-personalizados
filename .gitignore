@@ -1,5 +1,6 @@
-# Documentación local (no versionada)
+# Documentación local (no versionada), salvo el README
 /*.md
+!/README.md
 
 # Dependencies
 node_modules/
