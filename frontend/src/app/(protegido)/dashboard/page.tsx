@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const { token, usuario } = useAuth();
   const [datos, setDatos] = useState<DashboardData | null>(null);
   const [pagosPendientes, setPagosPendientes] = useState<Pago[]>([]);
+  const [pagosCliente, setPagosCliente] = useState<Pago[]>([]);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -26,18 +27,22 @@ export default function DashboardPage() {
       setCargando(true);
       try {
         const esAdministrador = usuario!.rol === "ADMINISTRADOR";
-        // RF-28: solo el admin necesita los pagos pendientes de confirmar; se
-        // trae con una segunda llamada al módulo de pagos ya existente en vez
-        // de inflar /api/dashboard con un campo que solo un rol usa.
-        const [respuesta, pendientes] = await Promise.all([
+        // RF-28 (admin): pagos pendientes de confirmar. RF-27 (cliente): sus
+        // propios pagos, para poder mostrar los que no están CONFIRMADO
+        // (historialPagos del dashboard solo trae los confirmados). Ambos se
+        // traen con una segunda llamada al módulo de pagos ya existente en
+        // vez de inflar /api/dashboard con campos que solo un rol usa.
+        const [respuesta, pendientes, propios] = await Promise.all([
           apiFetch<DashboardData>("/api/dashboard", { token: token! }),
           esAdministrador
             ? listarPagos(token!, { estado: "PENDIENTE_CONFIRMACION" })
             : Promise.resolve<Pago[]>([]),
+          esAdministrador ? Promise.resolve<Pago[]>([]) : listarPagos(token!, {}),
         ]);
         if (!activo) return;
         setDatos(respuesta);
         setPagosPendientes(pendientes);
+        setPagosCliente(propios);
       } catch (error) {
         toast.error(error instanceof ApiError ? error.message : "No se pudo cargar el dashboard");
       } finally {
@@ -66,5 +71,5 @@ export default function DashboardPage() {
     return <AdminDashboard datos={datos as DashboardAdmin} pagosPendientes={pagosPendientes} />;
   }
 
-  return <ClienteDashboard prestamos={datos as DashboardCliente} />;
+  return <ClienteDashboard prestamos={datos as DashboardCliente} pagos={pagosCliente} />;
 }

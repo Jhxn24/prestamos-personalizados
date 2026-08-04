@@ -1,4 +1,4 @@
-import type { DashboardClientePrestamo, EstadoCuota } from "@/lib/types";
+import type { DashboardClientePrestamo, EstadoCuota, Pago } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -25,11 +25,27 @@ const ESTADO_CUOTA_LABEL: Record<EstadoCuota, string> = {
   VENCIDA: "Vencida",
 };
 
+const ESTADO_PAGO_LABEL: Record<string, string> = {
+  PENDIENTE_CONFIRMACION: "Pendiente de confirmación",
+  RECHAZADO: "Rechazado",
+};
+
 export function ClienteDashboard({
   prestamos,
+  pagos,
 }: {
   prestamos: DashboardClientePrestamo[];
+  pagos: Pago[];
 }) {
+  // historialPagos del dashboard solo trae los ya CONFIRMADO (RF-27); acá se
+  // completa con los que siguen pendientes o fueron rechazados.
+  const pagosNoConfirmadosPorPrestamo = pagos
+    .filter((pago) => pago.estado !== "CONFIRMADO")
+    .reduce<Record<string, Pago[]>>((acumulado, pago) => {
+      (acumulado[pago.prestamoId] ??= []).push(pago);
+      return acumulado;
+    }, {});
+
   if (prestamos.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -107,6 +123,43 @@ export function ClienteDashboard({
                 </TableBody>
               </Table>
             </div>
+
+            {(pagosNoConfirmadosPorPrestamo[prestamo.id]?.length ?? 0) > 0 && (
+              <div>
+                <h3 className="mb-2 text-sm font-medium">Pagos pendientes</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Método</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                      <TableHead>Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagosNoConfirmadosPorPrestamo[prestamo.id].map((pago) => (
+                      <TableRow key={pago.id}>
+                        <TableCell>{formatearFecha(pago.fechaPago)}</TableCell>
+                        <TableCell>{pago.metodo}</TableCell>
+                        <TableCell className="text-right">{formatearMoneda(pago.monto)}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant={pago.estado === "RECHAZADO" ? "destructive" : "secondary"}>
+                              {ESTADO_PAGO_LABEL[pago.estado] ?? pago.estado}
+                            </Badge>
+                            {pago.estado === "RECHAZADO" && pago.motivoRechazo && (
+                              <span className="text-xs text-muted-foreground">
+                                {pago.motivoRechazo}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
 
             {prestamo.historialPagos.length > 0 && (
               <div>
