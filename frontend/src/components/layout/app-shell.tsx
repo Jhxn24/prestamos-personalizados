@@ -1,0 +1,32 @@
+import type { ReactNode } from "react";
+import type { Usuario } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
+interface AppShellProps {
+  usuario: Usuario;
+  onLogout: () => void;
+  children: ReactNode;
+}
+
+export function AppShell({ usuario, onLogout, children }: AppShellProps) {
+  return (
+    <div className="flex min-h-full flex-1 flex-col">
+      <header className="flex items-center justify-between border-b px-6 py-4">
+        <div className="flex items-center gap-3">
+          <span className="font-semibold">Sistema de Préstamos</span>
+          <Badge variant="secondary">
+            {usuario.rol === "ADMINISTRADOR" ? "Administrador" : "Cliente"}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground">{usuario.email}</span>
+          <Button variant="outline" size="sm" onClick={onLogout}>
+            Cerrar sesión
+          </Button>
+        </div>
+      </header>
+      <main className="flex-1 p-6">{children}</main>
+    </div>
+  );
+}
