@@ -5,11 +5,17 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { obtenerPrestamo } from "@/lib/prestamos-api";
-import type { Prestamo } from "@/lib/types";
+import { listarPagos } from "@/lib/pagos-api";
+import type { CuotaPrestamo, Pago, Prestamo } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CronogramaTable } from "@/components/prestamos/cronograma-table";
+import { RegistrarPagoSheet } from "@/components/pagos/registrar-pago-sheet";
+import { ConfirmarPagoDialog } from "@/components/pagos/confirmar-pago-dialog";
+import { RechazarPagoDialog } from "@/components/pagos/rechazar-pago-dialog";
+import { VerDesglosePagoDialog } from "@/components/pagos/ver-desglose-pago-dialog";
 
 const MODALIDAD_LABEL: Record<string, string> = {
   INTERES_FIJO: "Interés fijo",
@@ -24,6 +30,18 @@ const POLITICA_MORA_LABEL: Record<string, string> = {
   MORA: "Recargo diario",
 };
 
+const ESTADO_PAGO_VARIANTE: Record<Pago["estado"], "default" | "secondary" | "destructive"> = {
+  CONFIRMADO: "default",
+  PENDIENTE_CONFIRMACION: "secondary",
+  RECHAZADO: "destructive",
+};
+
+const ESTADO_PAGO_LABEL: Record<Pago["estado"], string> = {
+  CONFIRMADO: "Confirmado",
+  PENDIENTE_CONFIRMACION: "Pendiente",
+  RECHAZADO: "Rechazado",
+};
+
 function formatearMoneda(valor: string) {
   return `S/ ${valor}`;
 }
@@ -33,21 +51,31 @@ function formatearFecha(iso: string) {
 }
 
 export function PrestamoDetalle({ id }: { id: string }) {
-  const { token } = useAuth();
+  const { token, usuario } = useAuth();
+  const esAdministrador = usuario?.rol === "ADMINISTRADOR";
 
   const [prestamo, setPrestamo] = useState<Prestamo | null>(null);
+  const [pagos, setPagos] = useState<Pago[] | null>(null);
   const [cargando, setCargando] = useState(true);
   const [errorEstado, setErrorEstado] = useState<404 | 403 | null>(null);
+
+  const [cuotaSheet, setCuotaSheet] = useState<CuotaPrestamo | null>(null);
+  const [pagoDesglose, setPagoDesglose] = useState<Pago | null>(null);
+  const [pagoConfirmar, setPagoConfirmar] = useState<Pago | null>(null);
+  const [pagoRechazar, setPagoRechazar] = useState<Pago | null>(null);
 
   useEffect(() => {
     if (!token) return;
     let activo = true;
 
-    async function cargarPrestamo() {
+    async function cargar() {
       setCargando(true);
       try {
-        const respuesta = await obtenerPrestamo(token!, id);
-        if (activo) setPrestamo(respuesta);
+        const respuestaPrestamo = await obtenerPrestamo(token!, id);
+        if (!activo) return;
+        setPrestamo(respuestaPrestamo);
+        const respuestaPagos = await listarPagos(token!, { prestamoId: id });
+        if (activo) setPagos(respuestaPagos);
       } catch (error) {
         if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
           if (activo) setErrorEstado(error.status);
@@ -59,12 +87,22 @@ export function PrestamoDetalle({ id }: { id: string }) {
       }
     }
 
-    cargarPrestamo();
+    cargar();
 
     return () => {
       activo = false;
     };
   }, [token, id]);
+
+  async function recargar() {
+    if (!token) return;
+    const [respuestaPrestamo, respuestaPagos] = await Promise.all([
+      obtenerPrestamo(token, id),
+      listarPagos(token, { prestamoId: id }),
+    ]);
+    setPrestamo(respuestaPrestamo);
+    setPagos(respuestaPagos);
+  }
 
   if (cargando) {
     return (
@@ -176,9 +214,78 @@ export function PrestamoDetalle({ id }: { id: string }) {
           <CardTitle>Cronograma</CardTitle>
         </CardHeader>
         <CardContent>
-          <CronogramaTable cuotas={prestamo.cuotas} variant="real" />
+          <CronogramaTable cuotas={prestamo.cuotas} variant="real" onRegistrarPago={setCuotaSheet} />
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Historial de pagos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!pagos || pagos.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Todavía no hay pagos registrados.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {pagos.map((pago) => (
+                <div
+                  key={pago.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <Badge variant={ESTADO_PAGO_VARIANTE[pago.estado]}>
+                      {ESTADO_PAGO_LABEL[pago.estado]}
+                    </Badge>
+                    <span className="text-sm">
+                      {formatearMoneda(pago.monto)} · cuota #{pago.cuota?.numero ?? "—"} ·{" "}
+                      {formatearFecha(pago.fechaPago)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setPagoDesglose(pago)}>
+                      Ver desglose
+                    </Button>
+                    {esAdministrador && pago.estado === "PENDIENTE_CONFIRMACION" && (
+                      <>
+                        <Button variant="outline" size="sm" onClick={() => setPagoConfirmar(pago)}>
+                          Confirmar
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => setPagoRechazar(pago)}>
+                          Rechazar
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <RegistrarPagoSheet
+        open={!!cuotaSheet}
+        onOpenChange={(open) => !open && setCuotaSheet(null)}
+        cuota={cuotaSheet}
+        onSuccess={recargar}
+      />
+      <VerDesglosePagoDialog
+        open={!!pagoDesglose}
+        onOpenChange={(open) => !open && setPagoDesglose(null)}
+        pago={pagoDesglose}
+      />
+      <ConfirmarPagoDialog
+        open={!!pagoConfirmar}
+        onOpenChange={(open) => !open && setPagoConfirmar(null)}
+        pago={pagoConfirmar}
+        onSuccess={recargar}
+      />
+      <RechazarPagoDialog
+        open={!!pagoRechazar}
+        onOpenChange={(open) => !open && setPagoRechazar(null)}
+        pago={pagoRechazar}
+        onSuccess={recargar}
+      />
     </div>
   );
 }

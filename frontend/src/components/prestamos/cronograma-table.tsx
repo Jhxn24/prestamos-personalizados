@@ -1,5 +1,6 @@
 import type { CuotaPrestamo, CuotaSimulada, EstadoCuota } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -35,9 +36,13 @@ interface CronogramaTableProps {
   cuotas: CuotaSimulada[] | CuotaPrestamo[];
   /** "simulacion": preview de /prestamos/simular (sin id/estado). "real": préstamo ya persistido. */
   variant: "simulacion" | "real";
+  /** Solo tiene efecto con variant="real": agrega una acción por cuota no pagada. */
+  onRegistrarPago?: (cuota: CuotaPrestamo) => void;
 }
 
-export function CronogramaTable({ cuotas, variant }: CronogramaTableProps) {
+export function CronogramaTable({ cuotas, variant, onRegistrarPago }: CronogramaTableProps) {
+  const conAcciones = variant === "real" && !!onRegistrarPago;
+
   return (
     <Table>
       <TableHeader>
@@ -51,6 +56,7 @@ export function CronogramaTable({ cuotas, variant }: CronogramaTableProps) {
           {variant === "real" && <TableHead className="text-right">Pagado</TableHead>}
           {variant === "real" && <TableHead className="text-right">Mora</TableHead>}
           {variant === "real" && <TableHead>Estado</TableHead>}
+          {conAcciones && <TableHead />}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -79,6 +85,15 @@ export function CronogramaTable({ cuotas, variant }: CronogramaTableProps) {
                     {ESTADO_LABEL[cuota.estado]}
                   </Badge>
                 </TableCell>
+                {conAcciones && (
+                  <TableCell>
+                    {cuota.estado !== "PAGADA" && (
+                      <Button variant="ghost" size="sm" onClick={() => onRegistrarPago!(cuota)}>
+                        Registrar pago
+                      </Button>
+                    )}
+                  </TableCell>
+                )}
               </>
             )}
           </TableRow>

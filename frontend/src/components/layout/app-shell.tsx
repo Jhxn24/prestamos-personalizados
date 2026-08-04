@@ -26,6 +26,9 @@ export function AppShell({ usuario, onLogout, children }: AppShellProps) {
             <Link href="/prestamos" className="text-muted-foreground hover:text-foreground">
               Préstamos
             </Link>
+            <Link href="/pagos" className="text-muted-foreground hover:text-foreground">
+              Pagos
+            </Link>
             {usuario.rol === "ADMINISTRADOR" && (
               <Link href="/clientes" className="text-muted-foreground hover:text-foreground">
                 Clientes

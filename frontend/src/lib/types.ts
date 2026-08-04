@@ -212,3 +212,76 @@ export interface SimularPrestamoResponse {
   };
   cuotas: CuotaSimulada[];
 }
+
+export type MetodoPago = "EFECTIVO" | "TRANSFERENCIA" | "DEPOSITO" | "YAPE_PLIN" | "OTRO";
+export type EstadoPago = "PENDIENTE_CONFIRMACION" | "CONFIRMADO" | "RECHAZADO";
+export type PoliticaInteresAnticipado = "COMPLETO" | "PROPORCIONAL";
+export type PoliticaAbonoExtraordinario = "REDUCIR_CUOTA" | "REDUCIR_PLAZO";
+
+interface ReciboPago {
+  numero: number;
+  monto: string;
+  fechaEmision: string;
+}
+
+interface CuotaResumenPago {
+  id: string;
+  numero: number;
+  estado: EstadoCuota;
+  total: string;
+  montoPagado: string;
+}
+
+interface PrestamoResumenPago {
+  id: string;
+  clienteId: string;
+  estado: EstadoPrestamo;
+  capitalPendiente: string;
+}
+
+/** GET/POST /api/pagos — pagos.dto.js:pagoDTO. */
+export interface Pago {
+  id: string;
+  prestamoId: string;
+  cuotaId: string | null;
+  monto: string;
+  metodo: MetodoPago;
+  estado: EstadoPago;
+  moraAplicada: string;
+  interesAplicado: string;
+  capitalAplicado: string;
+  excedente: string;
+  interesCondonado: string;
+  cuotasEliminadas: number;
+  politicaInteresAnticipado: PoliticaInteresAnticipado;
+  politicaAbonoExtraordinario: PoliticaAbonoExtraordinario;
+  comprobanteUrl: string | null;
+  observaciones: string | null;
+  motivoRechazo: string | null;
+  fechaPago: string;
+  fechaConfirmacion: string | null;
+  recibo: ReciboPago | null;
+  cuota: CuotaResumenPago | null;
+  prestamo: PrestamoResumenPago | null;
+}
+
+/**
+ * Body de POST /api/pagos. Las políticas solo tienen efecto cuando las manda
+ * el administrador (registrar = confirmar en el mismo request); un cliente
+ * que reporta un pago no puede condonarse interés a sí mismo (RF-14).
+ */
+export interface RegistrarPagoInput {
+  cuotaId: string;
+  monto: number;
+  metodo: MetodoPago;
+  comprobanteUrl?: string;
+  observaciones?: string;
+  politicaInteresAnticipado?: PoliticaInteresAnticipado;
+  politicaAbonoExtraordinario?: PoliticaAbonoExtraordinario;
+}
+
+/** Body de POST /api/pagos/:id/confirmar. */
+export interface ConfirmarPagoInput {
+  politicaInteresAnticipado?: PoliticaInteresAnticipado;
+  politicaAbonoExtraordinario?: PoliticaAbonoExtraordinario;
+}
