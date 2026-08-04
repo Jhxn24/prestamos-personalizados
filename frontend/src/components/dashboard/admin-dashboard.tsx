@@ -1,4 +1,5 @@
-import type { DashboardAdmin } from "@/lib/types";
+import Link from "next/link";
+import type { DashboardAdmin, Pago } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -32,7 +33,12 @@ function StatCard({ titulo, valor }: { titulo: string; valor: string }) {
   );
 }
 
-export function AdminDashboard({ datos }: { datos: DashboardAdmin }) {
+interface AdminDashboardProps {
+  datos: DashboardAdmin;
+  pagosPendientes: Pago[];
+}
+
+export function AdminDashboard({ datos, pagosPendientes }: AdminDashboardProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -44,6 +50,7 @@ export function AdminDashboard({ datos }: { datos: DashboardAdmin }) {
         <StatCard titulo="Clientes morosos" valor={String(datos.clientesMorosos)} />
         <StatCard titulo="Préstamos vencidos" valor={String(datos.prestamosVencidos)} />
         <StatCard titulo="Préstamos activos" valor={String(datos.prestamosActivos)} />
+        <StatCard titulo="Pagos pendientes" valor={String(pagosPendientes.length)} />
       </div>
 
       <Card>
@@ -94,6 +101,56 @@ export function AdminDashboard({ datos }: { datos: DashboardAdmin }) {
                     <TableCell className="text-right">
                       {formatearMoneda(cobro.montoPendiente)}
                     </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Pagos pendientes de confirmar</CardTitle>
+          {pagosPendientes.length > 0 && (
+            <Link
+              href="/pagos?estado=PENDIENTE_CONFIRMACION"
+              className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+            >
+              Ver todos
+            </Link>
+          )}
+        </CardHeader>
+        <CardContent>
+          {pagosPendientes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No hay pagos pendientes de confirmar.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cuota</TableHead>
+                  <TableHead>Método</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="text-right">Monto</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pagosPendientes.map((pago) => (
+                  <TableRow key={pago.id}>
+                    <TableCell>
+                      {pago.prestamo ? (
+                        <Link href={`/prestamos/${pago.prestamo.id}`} className="hover:underline">
+                          {pago.cuota ? `#${pago.cuota.numero}` : "—"}
+                        </Link>
+                      ) : pago.cuota ? (
+                        `#${pago.cuota.numero}`
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell>{pago.metodo}</TableCell>
+                    <TableCell>{formatearFecha(pago.fechaPago)}</TableCell>
+                    <TableCell className="text-right">{formatearMoneda(pago.monto)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
