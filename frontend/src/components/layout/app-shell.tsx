@@ -13,7 +13,7 @@ interface AppShellProps {
 export function AppShell({ usuario, onLogout, children }: AppShellProps) {
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="flex items-center justify-between border-b px-6 py-4">
+      <header className="no-print flex items-center justify-between border-b px-6 py-4">
         <div className="flex items-center gap-4">
           <span className="font-semibold">Sistema de Préstamos</span>
           <Badge variant="secondary">
@@ -32,6 +32,11 @@ export function AppShell({ usuario, onLogout, children }: AppShellProps) {
             {usuario.rol === "ADMINISTRADOR" && (
               <Link href="/clientes" className="text-muted-foreground hover:text-foreground">
                 Clientes
+              </Link>
+            )}
+            {usuario.rol === "ADMINISTRADOR" && (
+              <Link href="/reportes" className="text-muted-foreground hover:text-foreground">
+                Reportes
               </Link>
             )}
           </nav>

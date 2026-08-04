@@ -40,11 +40,11 @@ export function esMoroso(prestamo: Prestamo) {
   return prestamo.estado === "ACTIVO" && cuotasVencidas(prestamo).length > 0;
 }
 
-function diasAtrasoMaximo(prestamo: Prestamo) {
+export function diasAtrasoMaximo(prestamo: Prestamo) {
   return cuotasVencidas(prestamo).reduce((max, cuota) => Math.max(max, cuota.diasAtraso), 0);
 }
 
-function montoVencido(prestamo: Prestamo) {
+export function montoVencido(prestamo: Prestamo) {
   return cuotasVencidas(prestamo).reduce(
     (total, cuota) => total + (Number(cuota.total) - Number(cuota.montoPagado)),
     0
