@@ -18,9 +18,9 @@ function formatearFecha(iso: string) {
   return new Date(iso).toLocaleDateString("es-PE");
 }
 
-function StatCard({ titulo, valor }: { titulo: string; valor: string }) {
-  return (
-    <Card>
+function StatCard({ titulo, valor, href }: { titulo: string; valor: string; href?: string }) {
+  const contenido = (
+    <Card className={href ? "transition-colors hover:bg-muted/50" : undefined}>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {titulo}
@@ -31,6 +31,8 @@ function StatCard({ titulo, valor }: { titulo: string; valor: string }) {
       </CardContent>
     </Card>
   );
+
+  return href ? <Link href={href}>{contenido}</Link> : contenido;
 }
 
 interface AdminDashboardProps {
@@ -47,7 +49,11 @@ export function AdminDashboard({ datos, pagosPendientes }: AdminDashboardProps) 
         <StatCard titulo="Intereses ganados" valor={formatearMoneda(datos.interesesGanados)} />
         <StatCard titulo="Capital pendiente" valor={formatearMoneda(datos.capitalPendiente)} />
         <StatCard titulo="Clientes activos" valor={String(datos.clientesActivos)} />
-        <StatCard titulo="Clientes morosos" valor={String(datos.clientesMorosos)} />
+        <StatCard
+          titulo="Clientes morosos"
+          valor={String(datos.clientesMorosos)}
+          href={datos.clientesMorosos > 0 ? "/clientes/morosos" : undefined}
+        />
         <StatCard titulo="Préstamos vencidos" valor={String(datos.prestamosVencidos)} />
         <StatCard titulo="Préstamos activos" valor={String(datos.prestamosActivos)} />
         <StatCard titulo="Pagos pendientes" valor={String(pagosPendientes.length)} />

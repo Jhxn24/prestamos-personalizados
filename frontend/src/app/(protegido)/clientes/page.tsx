@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -98,7 +99,12 @@ export default function ClientesPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Clientes</h1>
-        <Button onClick={abrirCrear}>Nuevo cliente</Button>
+        <div className="flex items-center gap-4">
+          <Link href="/clientes/morosos" className="text-sm text-muted-foreground hover:underline">
+            Ver morosos
+          </Link>
+          <Button onClick={abrirCrear}>Nuevo cliente</Button>
+        </div>
       </div>
 
       {cargando || !clientes ? (
