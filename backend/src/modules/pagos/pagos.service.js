@@ -11,6 +11,7 @@ const {
   ErrorMotorCalculo,
 } = require('../motor-calculo');
 const { actualizarMoraDePrestamo } = require('../mora/mora.service');
+const notificacionesService = require('../notificaciones/notificaciones.service');
 
 const INCLUDE_PAGO = {
   recibo: true,
@@ -19,6 +20,29 @@ const INCLUDE_PAGO = {
 };
 
 const dec = (valor) => new Decimal(valor.toString());
+
+/** RF-27: avisa al cliente dueño del préstamo el resultado de su pago. */
+async function notificarCliente(pagoId, { tipo, titulo, mensaje }) {
+  const pago = await prisma.pago.findUnique({
+    where: { id: pagoId },
+    select: {
+      prestamoId: true,
+      cuotaId: true,
+      prestamo: { select: { cliente: { select: { usuarioId: true } } } },
+    },
+  });
+  if (!pago) return;
+
+  await notificacionesService.crear({
+    usuarioId: pago.prestamo.cliente.usuarioId,
+    tipo,
+    titulo,
+    mensaje,
+    prestamoId: pago.prestamoId,
+    cuotaId: pago.cuotaId,
+    pagoId,
+  });
+}
 
 /**
  * Reporte de pago del cliente (RF-21) o registro directo del administrador (RF-25).
@@ -98,8 +122,30 @@ async function registrarPago(
 
   // El pago del administrador ya viene confirmado: se aplica de inmediato.
   if (esAdministrador) {
-    return { pago: await aplicarPago(pago.id, usuario.id) };
+    const pagoAplicado = await aplicarPago(pago.id, usuario.id);
+    await notificarCliente(pago.id, {
+      tipo: 'PAGO_CONFIRMADO',
+      titulo: 'Pago registrado',
+      mensaje: `Se registró tu pago de S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero}.`,
+    });
+    return { pago: pagoAplicado };
   }
+
+  // RF-27 (recibido): confirmación al cliente de que su reporte llegó.
+  // RF-28: aviso a los administradores de que hay un pago pendiente de confirmar.
+  await notificarCliente(pago.id, {
+    tipo: 'PAGO_REPORTADO',
+    titulo: 'Reportaste un pago',
+    mensaje: `Registramos tu pago de S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero}, pendiente de confirmación.`,
+  });
+  await notificacionesService.crearParaAdministradores({
+    tipo: 'PAGO_REPORTADO',
+    titulo: 'Nuevo pago reportado',
+    mensaje: `${prestamo.cliente.nombre} ${prestamo.cliente.apellido} reportó un pago de S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero}, pendiente de confirmar.`,
+    prestamoId: prestamo.id,
+    cuotaId: cuota.id,
+    pagoId: pago.id,
+  });
 
   return { pago: await obtenerPagoPorId(pago.id) };
 }
@@ -135,7 +181,13 @@ async function confirmarPago(
     });
   }
 
-  return { pago: await aplicarPago(pagoId, usuarioId) };
+  const pagoAplicado = await aplicarPago(pagoId, usuarioId);
+  await notificarCliente(pagoId, {
+    tipo: 'PAGO_CONFIRMADO',
+    titulo: 'Tu pago fue confirmado',
+    mensaje: `Confirmamos tu pago de S/ ${dec(pagoAplicado.monto).toFixed(2)} para la cuota #${pagoAplicado.cuota?.numero ?? ''}.`.trim(),
+  });
+  return { pago: pagoAplicado };
 }
 
 /**
@@ -160,6 +212,14 @@ async function rechazarPago(pagoId, usuarioId, motivoRechazo) {
       fechaConfirmacion: new Date(),
     },
     include: INCLUDE_PAGO,
+  });
+
+  await notificarCliente(pagoId, {
+    tipo: 'PAGO_RECHAZADO',
+    titulo: 'Tu pago fue rechazado',
+    mensaje: motivoRechazo
+      ? `Rechazamos tu pago de S/ ${dec(actualizado.monto).toFixed(2)}: ${motivoRechazo}`
+      : `Rechazamos tu pago de S/ ${dec(actualizado.monto).toFixed(2)}.`,
   });
 
   return { pago: actualizado };

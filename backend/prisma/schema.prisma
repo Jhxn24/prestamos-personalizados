@@ -28,6 +28,7 @@ model Usuario {
 
   pagosRegistrados Pago[] @relation("PagosRegistrados")
   pagosConfirmados Pago[] @relation("PagosConfirmados")
+  notificaciones   Notificacion[]
 }
 
 model Cliente {
@@ -257,4 +258,39 @@ model Recibo {
   fechaEmision DateTime @default(now())
 
   createdAt DateTime @default(now())
+}
+
+// RF-26/27/28: avisos en la app para cliente y administrador.
+enum TipoNotificacion {
+  CUOTA_POR_VENCER_SEMANA // RF-26: falta una semana para el vencimiento
+  CUOTA_POR_VENCER_DIA    // RF-26: falta un día para el vencimiento
+  CUOTA_VENCE_HOY         // RF-26: vence hoy
+  PAGO_REPORTADO          // RF-28: un cliente reportó un pago (para el admin)
+  PAGO_CONFIRMADO         // RF-27: el admin confirmó el pago (para el cliente)
+  PAGO_RECHAZADO          // RF-27: el admin rechazó el pago (para el cliente)
+  RESUMEN_DIARIO_ADMIN    // RF-28: cobros del día/semana, morosos, pendientes
+}
+
+model Notificacion {
+  id String @id @default(uuid())
+
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+
+  tipo    TipoNotificacion
+  titulo  String
+  mensaje String
+  leida   Boolean @default(false)
+
+  // Referencias para poder navegar desde la notificación. Sin FK a propósito:
+  // una cuota puede eliminarse al recalcular el cronograma (RF-19) y eso no
+  // debe romper ni arrastrar el historial de notificaciones ya emitidas.
+  prestamoId String?
+  cuotaId    String?
+  pagoId     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([usuarioId, leida])
+  @@index([tipo, createdAt])
 }

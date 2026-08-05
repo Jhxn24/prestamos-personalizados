@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Usuario } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { NotificacionesBell } from "@/components/layout/notificaciones-bell";
 
 interface AppShellProps {
   usuario: Usuario;
@@ -42,6 +43,7 @@ export function AppShell({ usuario, onLogout, children }: AppShellProps) {
           </nav>
         </div>
         <div className="flex items-center gap-4">
+          <NotificacionesBell />
           <span className="text-sm text-muted-foreground">{usuario.email}</span>
           <Button variant="outline" size="sm" onClick={onLogout}>
             Cerrar sesión

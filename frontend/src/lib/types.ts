@@ -285,3 +285,26 @@ export interface ConfirmarPagoInput {
   politicaInteresAnticipado?: PoliticaInteresAnticipado;
   politicaAbonoExtraordinario?: PoliticaAbonoExtraordinario;
 }
+
+/** RF-26/27/28. */
+export type TipoNotificacion =
+  | "CUOTA_POR_VENCER_SEMANA"
+  | "CUOTA_POR_VENCER_DIA"
+  | "CUOTA_VENCE_HOY"
+  | "PAGO_REPORTADO"
+  | "PAGO_CONFIRMADO"
+  | "PAGO_RECHAZADO"
+  | "RESUMEN_DIARIO_ADMIN";
+
+/** GET /api/notificaciones — notificaciones.dto.js:notificacionDTO. */
+export interface Notificacion {
+  id: string;
+  tipo: TipoNotificacion;
+  titulo: string;
+  mensaje: string;
+  leida: boolean;
+  prestamoId: string | null;
+  cuotaId: string | null;
+  pagoId: string | null;
+  createdAt: string;
+}

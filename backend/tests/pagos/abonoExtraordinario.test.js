@@ -39,6 +39,18 @@ test.before(async () => {
 });
 
 test.after(async () => {
+  // Los pagos disparan notificaciones (RF-27/RF-28) que llegan también a
+  // TODOS los administradores reales de esta base de datos, no solo al `admin`
+  // de esta prueba — hay que limpiarlas por prestamoId o quedan ensuciando la
+  // bandeja del administrador real entre corridas.
+  const prestamosDeLaPrueba = await prisma.prestamo.findMany({
+    where: { clienteId: cliente.id },
+    select: { id: true },
+  });
+  await prisma.notificacion.deleteMany({
+    where: { prestamoId: { in: prestamosDeLaPrueba.map((p) => p.id) } },
+  });
+
   await prisma.recibo.deleteMany({ where: { pago: { prestamo: { clienteId: cliente.id } } } });
   await prisma.pago.deleteMany({ where: { prestamo: { clienteId: cliente.id } } });
   await prisma.prestamo.deleteMany({ where: { clienteId: cliente.id } });

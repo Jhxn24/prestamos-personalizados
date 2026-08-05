@@ -327,6 +327,77 @@ eliminaron después.
 
 ---
 
+## Notificaciones — `/api/notificaciones`
+
+Avisos en la app para RF-26 (recordatorios de vencimiento), RF-27 (estado del
+pago del cliente) y RF-28 (avisos al administrador). No hay email/push: son
+filas en la tabla `Notificacion` que cada rol consulta con su propio token
+(RNF-05 — un cliente solo ve las suyas).
+
+Se generan de dos formas:
+
+- **Por evento**, desde `pagos.service.js`: reportar (RF-21), confirmar y
+  rechazar un pago (RF-23) disparan la notificación correspondiente en el
+  momento.
+- **Por barrido diario**, vía `node-cron` (`src/jobs/notificaciones.job.js`),
+  todos los días a las 08:00 hora del servidor. El barrido es idempotente: no
+  duplica avisos si se corre más de una vez el mismo día.
+
+### `GET /api/notificaciones`
+
+Las últimas 100 notificaciones del usuario autenticado, más nuevas primero.
+`?noLeidas=true` filtra solo las no leídas.
+
+```json
+[
+  {
+    "id": "3f8e...",
+    "tipo": "PAGO_CONFIRMADO",
+    "titulo": "Tu pago fue confirmado",
+    "mensaje": "Confirmamos tu pago de S/ 300.00 para la cuota #1.",
+    "leida": false,
+    "prestamoId": "6d55551f-...",
+    "cuotaId": "bc03a8a8-...",
+    "pagoId": "4cf4a07b-...",
+    "createdAt": "2026-08-04T17:22:41.000Z"
+  }
+]
+```
+
+`tipo` es uno de: `CUOTA_POR_VENCER_SEMANA`, `CUOTA_POR_VENCER_DIA`,
+`CUOTA_VENCE_HOY` (RF-26); `PAGO_REPORTADO`, `PAGO_CONFIRMADO`,
+`PAGO_RECHAZADO` (RF-27, y `PAGO_REPORTADO` también llega al administrador
+por RF-28); `RESUMEN_DIARIO_ADMIN` (RF-28).
+
+### `GET /api/notificaciones/no-leidas/contador`
+
+```json
+{ "noLeidas": 3 }
+```
+
+### `POST /api/notificaciones/:id/leer`
+
+Marca una notificación propia como leída. `204` sin cuerpo. `404` si el id no
+existe o no pertenece al usuario autenticado.
+
+### `POST /api/notificaciones/leer-todas`
+
+Marca todas las notificaciones no leídas del usuario como leídas. `204` sin cuerpo.
+
+### `POST /api/notificaciones/generar` — Administrador
+
+Dispara a demanda el mismo barrido que corre el cron a las 08:00 (recordatorios
+de vencimiento + resumen del administrador). Pensado para pruebas o para
+recuperar el día si el proceso estuvo caído a esa hora; el body admite
+`fechaReferencia` opcional (ISO) para simular otro día.
+
+```json
+// response 200
+{ "recordatoriosCreados": 2, "resumenesCreados": 1 }
+```
+
+---
+
 ## Capa de DTOs
 
 Cada módulo que devuelve datos al frontend tiene su propio archivo
@@ -345,6 +416,8 @@ directamente, así que no tiene un archivo `.dto.js` separado.
 ## Fuera de alcance de esta pasada
 
 Del MVP descrito en `requerimientos.md` §9.1, lo único que faltaba exponer era
-el dashboard (RF-29/RF-30), ya cubierto arriba. **Notificaciones** (RF-26 a
-RF-28) y **reportes exportables** (RF-31, RF-32) están explícitamente en Fase
-2 (§9.2) y no se tocaron.
+el dashboard (RF-29/RF-30), ya cubierto arriba. Notificaciones (RF-26 a
+RF-28) ya está cubierto en la sección de arriba. De la Fase 2 (§9.2) quedan
+pendientes: **reportes exportables a Excel/PDF** (RF-32, hoy solo hay CSV),
+firma digital (RF-34), escaneo de DNI (RF-35), bitácora de auditoría (RF-36)
+y la app móvil (RF-37).
