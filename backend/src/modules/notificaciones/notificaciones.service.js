@@ -121,6 +121,9 @@ async function generarRecordatoriosVencimiento(fechaReferencia = new Date()) {
     });
 
     for (const cuota of cuotas) {
+      // Un cliente sin cuenta de acceso (RF-04 opcional) no tiene a quién notificar.
+      if (!cuota.prestamo.cliente.usuarioId) continue;
+
       const yaNotificada = await prisma.notificacion.findFirst({
         where: { cuotaId: cuota.id, tipo: ventana.tipo, createdAt: { gte: hoy } },
         select: { id: true },
@@ -146,7 +149,7 @@ async function generarRecordatoriosVencimiento(fechaReferencia = new Date()) {
 
 /**
  * RF-28: resumen diario para cada administrador con cobros del día, cobros de
- * la semana, clientes morosos y pagos pendientes de confirmar.
+ * la semana y clientes morosos.
  *
  * A lo sumo un resumen por administrador por día (idempotente igual que los
  * recordatorios de vencimiento).
@@ -156,7 +159,7 @@ async function generarResumenAdmin(fechaReferencia = new Date()) {
   const finHoy = agregarDias(hoy, 1);
   const finSemana = agregarDias(hoy, 7);
 
-  const [cuotasHoy, cuotasSemana, prestamosActivos, pagosPendientes, administradores] = await Promise.all([
+  const [cuotasHoy, cuotasSemana, prestamosActivos, administradores] = await Promise.all([
     prisma.cuota.findMany({
       where: {
         estado: { in: ['PENDIENTE', 'PARCIAL'] },
@@ -177,7 +180,6 @@ async function generarResumenAdmin(fechaReferencia = new Date()) {
       where: { estado: 'ACTIVO' },
       select: { clienteId: true, cuotas: { where: { estado: 'VENCIDA' }, select: { id: true } } },
     }),
-    prisma.pago.count({ where: { estado: 'PENDIENTE_CONFIRMACION' } }),
     prisma.usuario.findMany({ where: { rol: 'ADMINISTRADOR', activo: true }, select: { id: true } }),
   ]);
 
@@ -192,7 +194,7 @@ async function generarResumenAdmin(fechaReferencia = new Date()) {
 
   const mensaje =
     `Cobros de hoy: S/ ${cobrosHoy}. Cobros de la semana: S/ ${cobrosSemana}. ` +
-    `Clientes morosos: ${clientesMorosos}. Pagos pendientes de confirmar: ${pagosPendientes}.`;
+    `Clientes morosos: ${clientesMorosos}.`;
 
   let creadas = 0;
   for (const admin of administradores) {

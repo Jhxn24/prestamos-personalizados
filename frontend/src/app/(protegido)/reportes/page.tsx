@@ -24,6 +24,7 @@ const MODALIDAD_LABEL: Record<string, string> = {
   INTERES_FIJO: "Interés fijo",
   INTERES_SOBRE_SALDO: "Interés sobre saldo",
   CUOTAS_FIJAS: "Cuotas fijas",
+  CAPITAL_AL_FINAL: "Capital al final",
 };
 
 function formatearMoneda(valor: number) {

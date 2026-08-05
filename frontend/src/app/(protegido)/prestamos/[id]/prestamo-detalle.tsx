@@ -14,8 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CronogramaTable } from "@/components/prestamos/cronograma-table";
 import { RegistrarPagoSheet } from "@/components/pagos/registrar-pago-sheet";
-import { ConfirmarPagoDialog } from "@/components/pagos/confirmar-pago-dialog";
-import { RechazarPagoDialog } from "@/components/pagos/rechazar-pago-dialog";
+import { AnularPagoDialog } from "@/components/pagos/anular-pago-dialog";
 import { VerDesglosePagoDialog } from "@/components/pagos/ver-desglose-pago-dialog";
 import { AjustarPrestamoSheet } from "@/components/prestamos/ajustar-prestamo-sheet";
 
@@ -23,6 +22,7 @@ const MODALIDAD_LABEL: Record<string, string> = {
   INTERES_FIJO: "Interés fijo",
   INTERES_SOBRE_SALDO: "Interés sobre saldo",
   CUOTAS_FIJAS: "Cuotas fijas",
+  CAPITAL_AL_FINAL: "Capital al final",
 };
 
 const POLITICA_MORA_LABEL: Record<string, string> = {
@@ -34,12 +34,14 @@ const POLITICA_MORA_LABEL: Record<string, string> = {
 
 const ESTADO_PAGO_VARIANTE: Record<Pago["estado"], "default" | "secondary" | "destructive"> = {
   CONFIRMADO: "default",
+  ANULADO: "destructive",
   PENDIENTE_CONFIRMACION: "secondary",
   RECHAZADO: "destructive",
 };
 
 const ESTADO_PAGO_LABEL: Record<Pago["estado"], string> = {
   CONFIRMADO: "Confirmado",
+  ANULADO: "Anulado",
   PENDIENTE_CONFIRMACION: "Pendiente",
   RECHAZADO: "Rechazado",
 };
@@ -64,8 +66,7 @@ export function PrestamoDetalle({ id }: { id: string }) {
 
   const [cuotaSheet, setCuotaSheet] = useState<CuotaPrestamo | null>(null);
   const [pagoDesglose, setPagoDesglose] = useState<Pago | null>(null);
-  const [pagoConfirmar, setPagoConfirmar] = useState<Pago | null>(null);
-  const [pagoRechazar, setPagoRechazar] = useState<Pago | null>(null);
+  const [pagoAnular, setPagoAnular] = useState<Pago | null>(null);
   const [modoAjuste, setModoAjuste] = useState<"recalcular" | "refinanciar" | null>(null);
 
   useEffect(() => {
@@ -258,7 +259,11 @@ export function PrestamoDetalle({ id }: { id: string }) {
           <CardTitle>Cronograma</CardTitle>
         </CardHeader>
         <CardContent>
-          <CronogramaTable cuotas={prestamo.cuotas} variant="real" onRegistrarPago={setCuotaSheet} />
+          <CronogramaTable
+            cuotas={prestamo.cuotas}
+            variant="real"
+            onRegistrarPago={esAdministrador ? setCuotaSheet : undefined}
+          />
         </CardContent>
       </Card>
 
@@ -289,15 +294,10 @@ export function PrestamoDetalle({ id }: { id: string }) {
                     <Button variant="ghost" size="sm" onClick={() => setPagoDesglose(pago)}>
                       Ver desglose
                     </Button>
-                    {esAdministrador && pago.estado === "PENDIENTE_CONFIRMACION" && (
-                      <>
-                        <Button variant="outline" size="sm" onClick={() => setPagoConfirmar(pago)}>
-                          Confirmar
-                        </Button>
-                        <Button variant="destructive" size="sm" onClick={() => setPagoRechazar(pago)}>
-                          Rechazar
-                        </Button>
-                      </>
+                    {esAdministrador && pago.estado === "CONFIRMADO" && (
+                      <Button variant="destructive" size="sm" onClick={() => setPagoAnular(pago)}>
+                        Anular
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -318,16 +318,10 @@ export function PrestamoDetalle({ id }: { id: string }) {
         onOpenChange={(open) => !open && setPagoDesglose(null)}
         pago={pagoDesglose}
       />
-      <ConfirmarPagoDialog
-        open={!!pagoConfirmar}
-        onOpenChange={(open) => !open && setPagoConfirmar(null)}
-        pago={pagoConfirmar}
-        onSuccess={recargar}
-      />
-      <RechazarPagoDialog
-        open={!!pagoRechazar}
-        onOpenChange={(open) => !open && setPagoRechazar(null)}
-        pago={pagoRechazar}
+      <AnularPagoDialog
+        open={!!pagoAnular}
+        onOpenChange={(open) => !open && setPagoAnular(null)}
+        pago={pagoAnular}
         onSuccess={recargar}
       />
       <AjustarPrestamoSheet

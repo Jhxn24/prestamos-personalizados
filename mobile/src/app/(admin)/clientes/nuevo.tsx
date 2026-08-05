@@ -29,7 +29,11 @@ const CAMPOS_VACIOS: Campos = {
   password: '',
 };
 
-/** RF-01: alta de cliente — el backend crea también su cuenta de acceso (RF-04). */
+/**
+ * RF-01: alta de cliente. El acceso a la app es opcional (RF-04): si se
+ * llena uno de email/password se exige el otro; si no se llena ninguno, el
+ * cliente queda sin cuenta y se le puede agregar después.
+ */
 export default function NuevoClienteScreen() {
   const { token } = useAuth();
   const [campos, setCampos] = useState<Campos>(CAMPOS_VACIOS);
@@ -45,15 +49,19 @@ export default function NuevoClienteScreen() {
     if (!campos.nombre.trim()) nuevosErrores.nombre = 'Obligatorio';
     if (!campos.apellido.trim()) nuevosErrores.apellido = 'Obligatorio';
     if (!campos.documento.trim()) nuevosErrores.documento = 'Obligatorio';
-    if (!campos.email.trim()) {
-      nuevosErrores.email = 'Obligatorio';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(campos.email)) {
+
+    const email = campos.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       nuevosErrores.email = 'Email inválido';
     }
-    if (!campos.password) {
-      nuevosErrores.password = 'Obligatorio';
-    } else if (campos.password.length < 6) {
+    if (campos.password && campos.password.length < 6) {
       nuevosErrores.password = 'Mínimo 6 caracteres';
+    }
+    if (email && !campos.password) {
+      nuevosErrores.password = 'Obligatorio si se llena el email';
+    }
+    if (campos.password && !email) {
+      nuevosErrores.email = 'Obligatorio si se llena la contraseña';
     }
     setErrores(nuevosErrores);
     return Object.keys(nuevosErrores).length === 0;
@@ -63,12 +71,12 @@ export default function NuevoClienteScreen() {
     if (!token || !validar()) return;
     setEnviando(true);
     try {
+      const email = campos.email.trim();
       const cliente = await crearCliente(token, {
         nombre: campos.nombre.trim(),
         apellido: campos.apellido.trim(),
         documento: campos.documento.trim(),
-        email: campos.email.trim(),
-        password: campos.password,
+        ...(email && campos.password ? { email, password: campos.password } : {}),
         telefono: campos.telefono.trim() || undefined,
         direccion: campos.direccion.trim() || undefined,
       });
@@ -98,7 +106,7 @@ export default function NuevoClienteScreen() {
       <TextField label="Teléfono (opcional)" value={campos.telefono} onChangeText={(v) => actualizar('telefono', v)} />
       <TextField label="Dirección (opcional)" value={campos.direccion} onChangeText={(v) => actualizar('direccion', v)} />
       <TextField
-        label="Email"
+        label="Email (opcional)"
         value={campos.email}
         onChangeText={(v) => actualizar('email', v)}
         autoCapitalize="none"
@@ -106,7 +114,7 @@ export default function NuevoClienteScreen() {
         error={errores.email}
       />
       <TextField
-        label="Contraseña"
+        label="Contraseña (opcional)"
         value={campos.password}
         onChangeText={(v) => actualizar('password', v)}
         secureTextEntry

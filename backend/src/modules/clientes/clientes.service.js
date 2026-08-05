@@ -23,7 +23,12 @@ function obtenerClientePorId(id) {
 }
 
 async function crearCliente({ nombre, apellido, documento, telefono, direccion, email, password }, usuarioId) {
-  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  // El acceso a la app es opcional (uso local): solo se crea la cuenta si el
+  // administrador proveyó credenciales; si no, el cliente queda sin usuarioId
+  // y se le puede generar acceso después con `generarAccesoCliente`.
+  const datosUsuario = email && password
+    ? { usuario: { create: { email, password: await bcrypt.hash(password, SALT_ROUNDS), rol: 'CLIENTE' } } }
+    : {};
 
   const cliente = await prisma.cliente.create({
     data: {
@@ -32,13 +37,7 @@ async function crearCliente({ nombre, apellido, documento, telefono, direccion, 
       documento,
       telefono,
       direccion,
-      usuario: {
-        create: {
-          email,
-          password: passwordHash,
-          rol: 'CLIENTE',
-        },
-      },
+      ...datosUsuario,
     },
     include: { usuario: usuarioPublico },
   });
@@ -52,6 +51,34 @@ async function crearCliente({ nombre, apellido, documento, telefono, direccion, 
   });
 
   return cliente;
+}
+
+/** Agrega una cuenta de acceso a un cliente que no tenía (RF-04 opcional). */
+async function generarAccesoCliente(id, { email, password }, usuarioId) {
+  const cliente = await prisma.cliente.findUnique({ where: { id } });
+  if (!cliente) {
+    return { error: 'CLIENTE_NO_ENCONTRADO' };
+  }
+  if (cliente.usuarioId) {
+    return { error: 'CLIENTE_YA_TIENE_ACCESO' };
+  }
+
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  const actualizado = await prisma.cliente.update({
+    where: { id },
+    data: { usuario: { create: { email, password: passwordHash, rol: 'CLIENTE' } } },
+    include: { usuario: usuarioPublico },
+  });
+
+  await auditoriaService.registrar({
+    usuarioId,
+    entidad: 'CLIENTE',
+    entidadId: id,
+    accion: 'ACTUALIZAR',
+    detalle: `Se generó acceso a la app para ${actualizado.nombre} ${actualizado.apellido}.`,
+  });
+
+  return { cliente: actualizado };
 }
 
 /** RNF-12: registra en la bitácora qué campos cambiaron, no solo que hubo un cambio. */
@@ -88,11 +115,14 @@ async function actualizarCliente(id, datos, usuarioId) {
 }
 
 async function desactivarCliente(id, usuarioId) {
+  const existente = await prisma.cliente.findUnique({ where: { id }, select: { usuarioId: true } });
+
   const cliente = await prisma.cliente.update({
     where: { id },
     data: {
       activo: false,
-      usuario: { update: { activo: false } },
+      // Un cliente sin cuenta (acceso opcional) no tiene usuario que desactivar.
+      ...(existente?.usuarioId ? { usuario: { update: { activo: false } } } : {}),
     },
     include: { usuario: usuarioPublico },
   });
@@ -112,6 +142,7 @@ module.exports = {
   listarClientes,
   obtenerClientePorId,
   crearCliente,
+  generarAccesoCliente,
   actualizarCliente,
   desactivarCliente,
 };

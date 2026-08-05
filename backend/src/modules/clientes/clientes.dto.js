@@ -12,6 +12,7 @@ function clienteDTO(cliente) {
     direccion: cliente.direccion,
     activo: cliente.activo,
     email: cliente.usuario?.email ?? null,
+    tieneAcceso: Boolean(cliente.usuarioId),
   };
 }
 

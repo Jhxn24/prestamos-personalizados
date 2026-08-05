@@ -17,7 +17,6 @@ const prestamosService = require('../../src/modules/prestamos/prestamos.service'
 
 const SUFIJO = `test-pagos-${Date.now()}`;
 let admin;
-let usuarioCliente;
 let cliente;
 
 const dec = (valor) => new Decimal(valor.toString());
@@ -36,14 +35,13 @@ test.before(async () => {
     },
     include: { usuario: true },
   });
-  usuarioCliente = cliente.usuario;
 });
 
 test.after(async () => {
-  // Los pagos disparan notificaciones (RF-27/RF-28) que llegan también a
-  // TODOS los administradores reales de esta base de datos, no solo al `admin`
-  // de esta prueba — hay que limpiarlas por prestamoId o quedan ensuciando la
-  // bandeja del administrador real entre corridas.
+  // Los pagos disparan notificaciones (RF-27) que llegan también a TODOS los
+  // administradores reales de esta base de datos, no solo al `admin` de esta
+  // prueba — hay que limpiarlas por prestamoId o quedan ensuciando la bandeja
+  // del administrador real entre corridas.
   const prestamosDeLaPrueba = await prisma.prestamo.findMany({
     where: { clienteId: cliente.id },
     select: { id: true },
@@ -53,11 +51,12 @@ test.after(async () => {
   });
 
   await prisma.recibo.deleteMany({ where: { pago: { prestamo: { clienteId: cliente.id } } } });
+  await prisma.pagoSnapshot.deleteMany({ where: { pago: { prestamo: { clienteId: cliente.id } } } });
   await prisma.pago.deleteMany({ where: { prestamo: { clienteId: cliente.id } } });
   await prisma.prestamo.updateMany({ where: { clienteId: cliente.id }, data: { prestamoOrigenId: null } });
   await prisma.prestamo.deleteMany({ where: { clienteId: cliente.id } });
   await prisma.cliente.delete({ where: { id: cliente.id } });
-  await prisma.usuario.deleteMany({ where: { id: { in: [admin.id, usuarioCliente.id] } } });
+  await prisma.usuario.deleteMany({ where: { id: { in: [admin.id, cliente.usuario.id] } } });
   await prisma.$disconnect();
 });
 
@@ -106,38 +105,17 @@ async function verificarInvarianteDeSaldo(prestamoId) {
   );
 }
 
-test('RF-22: el pago reportado por el cliente NO toca el préstamo hasta confirmarse', async () => {
+test('RF-25: al marcar un pago se aplica de inmediato y se emite el recibo', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
-  const { pago } = await pagosService.registrarPago(
-    { cuotaId: cuota1.id, monto: 300, comprobanteUrl: 'https://ejemplo/comprobante.jpg' },
-    usuarioCliente
-  );
+  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin.id);
 
-  assert.equal(pago.estado, 'PENDIENTE_CONFIRMACION');
-  assert.equal(pago.recibo, null, 'no debe emitirse recibo antes de confirmar');
-
-  const despues = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
-  assert.equal(dec(despues.capitalPendiente).toFixed(2), '1000.00');
-
-  const [cuotaDespues] = await cuotasDe(prestamo.id);
-  assert.equal(cuotaDespues.estado, 'PENDIENTE');
-  assert.equal(dec(cuotaDespues.montoPagado).toFixed(2), '0.00');
-});
-
-test('RF-23 y RF-24: al confirmar se aplica el pago y se emite el recibo', async () => {
-  const prestamo = await crearPrestamo();
-  const [cuota1] = await cuotasDe(prestamo.id);
-
-  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, usuarioCliente);
-  const { pago: confirmado } = await pagosService.confirmarPago(pago.id, admin.id);
-
-  assert.equal(confirmado.estado, 'CONFIRMADO');
-  assert.equal(dec(confirmado.interesAplicado).toFixed(2), '50.00');
-  assert.equal(dec(confirmado.capitalAplicado).toFixed(2), '250.00');
-  assert.ok(confirmado.recibo, 'debe existir un recibo');
-  assert.equal(dec(confirmado.recibo.monto).toFixed(2), '300.00');
+  assert.equal(pago.estado, 'CONFIRMADO');
+  assert.equal(dec(pago.interesAplicado).toFixed(2), '50.00');
+  assert.equal(dec(pago.capitalAplicado).toFixed(2), '250.00');
+  assert.ok(pago.recibo, 'debe existir un recibo');
+  assert.equal(dec(pago.recibo.monto).toFixed(2), '300.00');
 
   const despues = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
   assert.equal(dec(despues.capitalPendiente).toFixed(2), '750.00');
@@ -148,27 +126,11 @@ test('RF-23 y RF-24: al confirmar se aplica el pago y se emite el recibo', async
   await verificarInvarianteDeSaldo(prestamo.id);
 });
 
-test('RF-25: el pago registrado por el administrador se confirma y aplica en el acto', async () => {
-  const prestamo = await crearPrestamo();
-  const [cuota1] = await cuotasDe(prestamo.id);
-
-  const { pago } = await pagosService.registrarPago(
-    { cuotaId: cuota1.id, monto: 300, metodo: 'EFECTIVO' },
-    admin
-  );
-
-  assert.equal(pago.estado, 'CONFIRMADO');
-  assert.ok(pago.recibo);
-
-  const despues = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
-  assert.equal(dec(despues.capitalPendiente).toFixed(2), '750.00');
-});
-
 test('RF-15: un pago parcial deja la cuota PARCIAL y baja el saldo solo lo abonado', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
-  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 150 }, admin);
+  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 150 }, admin.id);
 
   const cuotas = await cuotasDe(prestamo.id);
   assert.equal(cuotas[0].estado, 'PARCIAL');
@@ -184,7 +146,7 @@ test('RF-12: un pago que solo cubre interés deja el capital intacto', async () 
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
-  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 50 }, admin);
+  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 50 }, admin.id);
 
   const despues = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
   assert.equal(dec(despues.capitalPendiente).toFixed(2), '1000.00');
@@ -201,7 +163,7 @@ test('RF-11/RF-13: sobre saldo, un abono extra reduce el interés de las cuotas 
   const cuotasAntes = await cuotasDe(prestamo.id);
 
   // Cuota 1 = 300 (50 interés + 250 capital). Paga 500: 200 de excedente a capital.
-  await pagosService.registrarPago({ cuotaId: cuotasAntes[0].id, monto: 500 }, admin);
+  await pagosService.registrarPago({ cuotaId: cuotasAntes[0].id, monto: 500 }, admin.id);
 
   const despues = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
   assert.equal(dec(despues.capitalPendiente).toFixed(2), '550.00');
@@ -221,7 +183,7 @@ test('interés fijo: el abono extra reduce el capital pero NO el interés futuro
   const prestamo = await crearPrestamo('INTERES_FIJO');
   const cuotasAntes = await cuotasDe(prestamo.id);
 
-  await pagosService.registrarPago({ cuotaId: cuotasAntes[0].id, monto: 500 }, admin);
+  await pagosService.registrarPago({ cuotaId: cuotasAntes[0].id, monto: 500 }, admin.id);
 
   const cuotas = await cuotasDe(prestamo.id);
   // El interés sigue siendo 5% del capital ORIGINAL (1000) en todas las futuras
@@ -233,29 +195,13 @@ test('interés fijo: el abono extra reduce el capital pero NO el interés futuro
   await verificarInvarianteDeSaldo(prestamo.id);
 });
 
-test('el pago rechazado no mueve nada de la contabilidad', async () => {
-  const prestamo = await crearPrestamo();
-  const [cuota1] = await cuotasDe(prestamo.id);
-
-  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, usuarioCliente);
-  const { pago: rechazado } = await pagosService.rechazarPago(pago.id, admin.id, 'Comprobante ilegible');
-
-  assert.equal(rechazado.estado, 'RECHAZADO');
-  assert.equal(rechazado.motivoRechazo, 'Comprobante ilegible');
-  assert.equal(rechazado.recibo, null);
-
-  const despues = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
-  assert.equal(dec(despues.capitalPendiente).toFixed(2), '1000.00');
-  assert.equal(dec(despues.interesAcumulado).toFixed(2), '0.00');
-});
-
 test('pagar todo el cronograma deja el préstamo en PAGADO con saldo 0', async () => {
   const prestamo = await crearPrestamo();
 
   for (let i = 0; i < 4; i += 1) {
     const cuotas = await cuotasDe(prestamo.id);
     const pendiente = cuotas.find((cuota) => cuota.estado !== 'PAGADA');
-    await pagosService.registrarPago({ cuotaId: pendiente.id, monto: pendiente.total }, admin);
+    await pagosService.registrarPago({ cuotaId: pendiente.id, monto: pendiente.total }, admin.id);
   }
 
   const despues = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
@@ -274,7 +220,7 @@ test('pagos sucesivos mantienen el invariante saldo = capital por cobrar', async
   for (const monto of montos) {
     const cuotas = await cuotasDe(prestamo.id);
     const objetivo = cuotas.find((cuota) => cuota.estado !== 'PAGADA');
-    await pagosService.registrarPago({ cuotaId: objetivo.id, monto }, admin);
+    await pagosService.registrarPago({ cuotaId: objetivo.id, monto }, admin.id);
     await verificarInvarianteDeSaldo(prestamo.id);
   }
 });
@@ -284,7 +230,7 @@ test('rechaza un pago que excede la deuda total del préstamo', async () => {
   const [cuota1] = await cuotasDe(prestamo.id);
 
   await assert.rejects(
-    () => pagosService.registrarPago({ cuotaId: cuota1.id, monto: 99999 }, admin),
+    () => pagosService.registrarPago({ cuotaId: cuota1.id, monto: 99999 }, admin.id),
     /excede la deuda pendiente/
   );
 
@@ -297,43 +243,12 @@ test('rechaza pagar una cuota ya saldada', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
-  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin);
+  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin.id);
 
   await assert.rejects(
-    () => pagosService.registrarPago({ cuotaId: cuota1.id, monto: 50 }, admin),
+    () => pagosService.registrarPago({ cuotaId: cuota1.id, monto: 50 }, admin.id),
     /ya está pagada/
   );
-});
-
-test('RNF-05: un cliente no puede pagar la cuota de otro préstamo ajeno', async () => {
-  const otro = await prisma.cliente.create({
-    data: {
-      nombre: 'Ajeno',
-      apellido: 'Test',
-      documento: `${SUFIJO}-ajeno`,
-      usuario: { create: { email: `ajeno-${SUFIJO}@test.local`, password: 'x', rol: 'CLIENTE' } },
-    },
-  });
-
-  const prestamoAjeno = await prestamosService.crearPrestamo({
-    clienteId: otro.id,
-    capital: 500,
-    tasaInteres: 5,
-    tipoInteres: 'MENSUAL',
-    frecuenciaPago: 'MENSUAL',
-    numeroCuotas: 2,
-    modalidad: 'INTERES_FIJO',
-    fechaDesembolso: new Date(),
-  });
-
-  const [cuotaAjena] = await cuotasDe(prestamoAjeno.id);
-  const resultado = await pagosService.registrarPago({ cuotaId: cuotaAjena.id, monto: 100 }, usuarioCliente);
-
-  assert.equal(resultado.error, 'SIN_ACCESO');
-
-  await prisma.prestamo.delete({ where: { id: prestamoAjeno.id } });
-  await prisma.cliente.delete({ where: { id: otro.id } });
-  await prisma.usuario.delete({ where: { id: otro.usuarioId } });
 });
 
 test('cuotas fijas: pagar el cronograma completo lo deja saldado sin descuadres', async () => {
@@ -347,7 +262,7 @@ test('cuotas fijas: pagar el cronograma completo lo deja saldado sin descuadres'
   for (let i = 0; i < 4; i += 1) {
     const cuotas = await cuotasDe(prestamo.id);
     const pendiente = cuotas.find((cuota) => cuota.estado !== 'PAGADA');
-    await pagosService.registrarPago({ cuotaId: pendiente.id, monto: pendiente.total }, admin);
+    await pagosService.registrarPago({ cuotaId: pendiente.id, monto: pendiente.total }, admin.id);
     await verificarInvarianteDeSaldo(prestamo.id);
   }
 
@@ -362,7 +277,7 @@ test('cuotas fijas: un abono extra rehace la anualidad sobre el saldo restante',
   const cuotasAntes = await cuotasDe(prestamo.id);
 
   // Cuota 1 = 282.01 (50 interés + 232.01 capital). Paga 450: 167.99 de excedente.
-  await pagosService.registrarPago({ cuotaId: cuotasAntes[0].id, monto: 450 }, admin);
+  await pagosService.registrarPago({ cuotaId: cuotasAntes[0].id, monto: 450 }, admin.id);
 
   const despues = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
   assert.equal(dec(despues.capitalPendiente).toFixed(2), '600.00');
@@ -375,16 +290,67 @@ test('cuotas fijas: un abono extra rehace la anualidad sobre el saldo restante',
   await verificarInvarianteDeSaldo(prestamo.id);
 });
 
-test('no se puede confirmar dos veces el mismo pago', async () => {
+test('anularPago revierte un pago simple: el préstamo y la cuota vuelven al estado previo', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
-  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, usuarioCliente);
-  await pagosService.confirmarPago(pago.id, admin.id);
+  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin.id);
+  const { pago: anulado } = await pagosService.anularPago(pago.id, admin.id, 'Marcado por error');
 
-  await assert.rejects(() => pagosService.confirmarPago(pago.id, admin.id), /Solo se puede confirmar/);
+  assert.equal(anulado.estado, 'ANULADO');
+  assert.equal(anulado.motivoAnulacion, 'Marcado por error');
+  assert.equal(anulado.recibo, null, 'el recibo debe desaparecer al anular');
 
-  // el saldo refleja UN solo pago, no dos
   const despues = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
-  assert.equal(dec(despues.capitalPendiente).toFixed(2), '750.00');
+  assert.equal(dec(despues.capitalPendiente).toFixed(2), '1000.00');
+  assert.equal(dec(despues.interesAcumulado).toFixed(2), '0.00');
+
+  const [cuotaDespues] = await cuotasDe(prestamo.id);
+  assert.equal(cuotaDespues.estado, 'PENDIENTE');
+  assert.equal(dec(cuotaDespues.montoPagado).toFixed(2), '0.00');
+  await verificarInvarianteDeSaldo(prestamo.id);
+});
+
+test('anularPago también revierte las cuotas futuras que se habían regenerado', async () => {
+  const prestamo = await crearPrestamo('INTERES_SOBRE_SALDO');
+  const cuotasAntes = await cuotasDe(prestamo.id);
+
+  const { pago } = await pagosService.registrarPago({ cuotaId: cuotasAntes[0].id, monto: 500 }, admin.id);
+  await pagosService.anularPago(pago.id, admin.id);
+
+  const cuotasDespues = await cuotasDe(prestamo.id);
+  assert.deepEqual(
+    cuotasDespues.slice(1).map((c) => dec(c.interes).toFixed(2)),
+    cuotasAntes.slice(1).map((c) => dec(c.interes).toFixed(2))
+  );
+  assert.deepEqual(
+    cuotasDespues.slice(1).map((c) => dec(c.capital).toFixed(2)),
+    cuotasAntes.slice(1).map((c) => dec(c.capital).toFixed(2))
+  );
+  await verificarInvarianteDeSaldo(prestamo.id);
+});
+
+test('anularPago no permite anular un pago que no es el más reciente del préstamo', async () => {
+  const prestamo = await crearPrestamo();
+  const [cuota1] = await cuotasDe(prestamo.id);
+
+  const { pago: pago1 } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 100 }, admin.id);
+  const cuotas = await cuotasDe(prestamo.id);
+  const pendiente = cuotas.find((c) => c.estado !== 'PAGADA');
+  await pagosService.registrarPago({ cuotaId: pendiente.id, monto: 100 }, admin.id);
+
+  await assert.rejects(() => pagosService.anularPago(pago1.id, admin.id), /más reciente/);
+});
+
+test('anularPago no permite anular un pago ya anulado', async () => {
+  const prestamo = await crearPrestamo();
+  const [cuota1] = await cuotasDe(prestamo.id);
+
+  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin.id);
+  await pagosService.anularPago(pago.id, admin.id);
+
+  await assert.rejects(
+    () => pagosService.anularPago(pago.id, admin.id),
+    /Solo se puede anular un pago confirmado/
+  );
 });

@@ -9,28 +9,41 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api';
 
-interface RechazarPagoModalProps {
+interface GenerarAccesoModalProps {
   visible: boolean;
   onCancelar: () => void;
-  onEnviar: (motivoRechazo: string | undefined) => Promise<void>;
+  onEnviar: (email: string, password: string) => Promise<void>;
 }
 
-/** RF-23: rechazo de un pago reportado, con motivo opcional. */
-export function RechazarPagoModal({ visible, onCancelar, onEnviar }: RechazarPagoModalProps) {
+/** Agrega una cuenta de acceso a un cliente que no tenía (RF-04 opcional). */
+export function GenerarAccesoModal({ visible, onCancelar, onEnviar }: GenerarAccesoModalProps) {
   const theme = useTheme();
-  const [motivo, setMotivo] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
-    if (visible) setMotivo('');
+    if (visible) {
+      setEmail('');
+      setPassword('');
+    }
   }, [visible]);
 
   async function enviar() {
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      Alert.alert('Email inválido', 'Ingresa un email válido.');
+      return;
+    }
+    if (password.length < 6) {
+      Alert.alert('Contraseña inválida', 'Debe tener al menos 6 caracteres.');
+      return;
+    }
+
     setEnviando(true);
     try {
-      await onEnviar(motivo.trim() || undefined);
+      await onEnviar(email.trim(), password);
     } catch (error) {
-      Alert.alert('No se pudo rechazar', error instanceof ApiError ? error.message : 'Intenta de nuevo.');
+      Alert.alert('No se pudo generar el acceso', error instanceof ApiError ? error.message : 'Intenta de nuevo.');
     } finally {
       setEnviando(false);
     }
@@ -40,17 +53,12 @@ export function RechazarPagoModal({ visible, onCancelar, onEnviar }: RechazarPag
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onCancelar}>
       <View style={styles.overlay}>
         <ThemedView style={[styles.content, { borderColor: theme.border }]}>
-          <ThemedText type="smallBold">Rechazar pago</ThemedText>
-          <TextField
-            label="Motivo (opcional)"
-            value={motivo}
-            onChangeText={setMotivo}
-            multiline
-            placeholder="Ej: comprobante ilegible"
-          />
+          <ThemedText type="smallBold">Generar acceso</ThemedText>
+          <TextField label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+          <TextField label="Contraseña" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" />
           <View style={styles.actions}>
             <Button title="Cancelar" variant="secondary" onPress={onCancelar} />
-            <Button title="Rechazar pago" variant="destructive" onPress={enviar} loading={enviando} />
+            <Button title="Generar acceso" onPress={enviar} loading={enviando} />
           </View>
         </ThemedView>
       </View>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
@@ -9,15 +10,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PurgarDatosDialog } from "@/components/sistema/purgar-datos-dialog";
 
 export default function CuentaPage() {
   const { token, usuario } = useAuth();
+  const router = useRouter();
 
   const [passwordActual, setPasswordActual] = useState("");
   const [passwordNueva, setPasswordNueva] = useState("");
   const [confirmarNueva, setConfirmarNueva] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [purgarAbierto, setPurgarAbierto] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -98,6 +102,31 @@ export default function CuentaPage() {
           </form>
         </CardContent>
       </Card>
+
+      {usuario?.rol === "ADMINISTRADOR" && (
+        <Card className="max-w-sm border-destructive/40">
+          <CardHeader>
+            <CardTitle className="text-destructive">Zona de peligro</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Borra permanentemente todos los clientes, préstamos y pagos. No se puede deshacer.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Button variant="destructive" onClick={() => setPurgarAbierto(true)}>
+              Eliminar todos los datos
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <PurgarDatosDialog
+        open={purgarAbierto}
+        onOpenChange={setPurgarAbierto}
+        onSuccess={() => {
+          router.push("/dashboard");
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

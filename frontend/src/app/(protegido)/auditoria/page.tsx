@@ -24,6 +24,7 @@ const OPCIONES_ENTIDAD: { value: string; label: string }[] = [
   { value: "CLIENTE", label: "Cliente" },
   { value: "PRESTAMO", label: "Préstamo" },
   { value: "PAGO", label: "Pago" },
+  { value: "SISTEMA", label: "Sistema" },
 ];
 
 export default function AuditoriaPage() {

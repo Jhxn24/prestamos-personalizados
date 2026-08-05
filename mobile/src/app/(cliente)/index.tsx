@@ -29,8 +29,7 @@ const ESTADO_CUOTA_LABEL: Record<EstadoCuota, string> = {
 };
 
 const ESTADO_PAGO_LABEL: Record<string, string> = {
-  PENDIENTE_CONFIRMACION: 'Pendiente de confirmación',
-  RECHAZADO: 'Rechazado',
+  ANULADO: 'Anulado',
 };
 
 /** RF-30: dashboard del cliente. Mismo criterio que frontend/cliente-dashboard.tsx. */
@@ -52,7 +51,7 @@ export default function ClienteDashboardScreen() {
           setPrestamos(dashboard);
           setPagosNoConfirmados(
             pagos
-              .filter((pago) => pago.estado !== 'CONFIRMADO')
+              .filter((pago) => pago.estado === 'ANULADO')
               .reduce<Record<string, Pago[]>>((acumulado, pago) => {
                 (acumulado[pago.prestamoId] ??= []).push(pago);
                 return acumulado;
@@ -122,16 +121,13 @@ export default function ClienteDashboardScreen() {
 
           {(pagosNoConfirmados[prestamo.id]?.length ?? 0) > 0 && (
             <View style={styles.section}>
-              <ThemedText type="smallBold">Pagos pendientes</ThemedText>
+              <ThemedText type="smallBold">Pagos anulados</ThemedText>
               {pagosNoConfirmados[prestamo.id].map((pago) => (
                 <View key={pago.id} style={styles.row}>
                   <ThemedText type="small" style={styles.rowLabel}>
                     {formatearFecha(pago.fechaPago)} · {formatearMoneda(pago.monto)}
                   </ThemedText>
-                  <Badge
-                    label={ESTADO_PAGO_LABEL[pago.estado] ?? pago.estado}
-                    variant={pago.estado === 'RECHAZADO' ? 'destructive' : 'secondary'}
-                  />
+                  <Badge label={ESTADO_PAGO_LABEL[pago.estado] ?? pago.estado} variant="destructive" />
                 </View>
               ))}
             </View>

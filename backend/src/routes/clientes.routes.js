@@ -11,5 +11,6 @@ router.get('/:id', clientesController.obtener);
 router.post('/', clientesController.crear);
 router.put('/:id', clientesController.actualizar);
 router.patch('/:id/desactivar', clientesController.desactivar);
+router.patch('/:id/generar-acceso', clientesController.generarAcceso);
 
 module.exports = router;

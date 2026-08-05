@@ -28,6 +28,7 @@ model Usuario {
 
   pagosRegistrados Pago[] @relation("PagosRegistrados")
   pagosConfirmados Pago[] @relation("PagosConfirmados")
+  pagosAnulados    Pago[] @relation("PagosAnulados")
   notificaciones   Notificacion[]
   registrosAuditoria RegistroAuditoria[]
 }
@@ -43,8 +44,8 @@ model Cliente {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
-  usuarioId String   @unique
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+  usuarioId String?  @unique
 
   prestamos Prestamo[]
 }
@@ -53,6 +54,7 @@ enum ModalidadPrestamo {
   INTERES_FIJO
   INTERES_SOBRE_SALDO
   CUOTAS_FIJAS
+  CAPITAL_AL_FINAL
 }
 
 enum TipoInteres {
@@ -184,9 +186,10 @@ model Cuota {
 }
 
 enum EstadoPago {
-  PENDIENTE_CONFIRMACION
+  PENDIENTE_CONFIRMACION // legado, ya no se produce
   CONFIRMADO
-  RECHAZADO
+  RECHAZADO // legado, ya no se produce
+  ANULADO
 }
 
 enum MetodoPago {
@@ -232,19 +235,41 @@ model Pago {
   fechaPago         DateTime  @default(now())
   fechaConfirmacion DateTime?
 
+  // Anulación: el admin deshace un pago marcado por error (reemplaza al
+  // antiguo flujo de confirmar/rechazar, ver Pago.estado).
+  anuladoPor      Usuario? @relation("PagosAnulados", fields: [anuladoPorId], references: [id])
+  anuladoPorId    String?
+  fechaAnulacion  DateTime?
+  motivoAnulacion String?
+
   // Auditoría mínima (RNF-12): quién reportó el pago y quién lo resolvió.
   registradoPor   Usuario  @relation("PagosRegistrados", fields: [registradoPorId], references: [id])
   registradoPorId String
   confirmadoPor   Usuario? @relation("PagosConfirmados", fields: [confirmadoPorId], references: [id])
   confirmadoPorId String?
 
-  recibo Recibo?
+  recibo   Recibo?
+  snapshot PagoSnapshot?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([prestamoId])
   @@index([estado])
+}
+
+// Estado previo del préstamo/cuotas justo antes de aplicar un Pago, para poder
+// revertirlo con `anularPago` sin tener que re-derivar la inversa exacta de
+// `aplicarPago` (que muta mora, la cuota pagada y N cuotas futuras a la vez).
+model PagoSnapshot {
+  id String @id @default(uuid())
+
+  pago   Pago   @relation(fields: [pagoId], references: [id], onDelete: Cascade)
+  pagoId String @unique
+
+  datos Json
+
+  createdAt DateTime @default(now())
 }
 
 // RF-24: se emite automáticamente al confirmar un pago.
@@ -266,9 +291,10 @@ enum TipoNotificacion {
   CUOTA_POR_VENCER_SEMANA // RF-26: falta una semana para el vencimiento
   CUOTA_POR_VENCER_DIA    // RF-26: falta un día para el vencimiento
   CUOTA_VENCE_HOY         // RF-26: vence hoy
-  PAGO_REPORTADO          // RF-28: un cliente reportó un pago (para el admin)
-  PAGO_CONFIRMADO         // RF-27: el admin confirmó el pago (para el cliente)
-  PAGO_RECHAZADO          // RF-27: el admin rechazó el pago (para el cliente)
+  PAGO_REPORTADO          // legado, ya no se produce (el cliente ya no autorreporta pagos)
+  PAGO_CONFIRMADO         // RF-27: el admin registró/confirmó el pago (para el cliente)
+  PAGO_RECHAZADO          // legado, ya no se produce
+  PAGO_ANULADO            // el admin anuló un pago marcado por error (para el cliente)
   RESUMEN_DIARIO_ADMIN    // RF-28: cobros del día/semana, morosos, pendientes
 }
 
@@ -301,6 +327,7 @@ enum EntidadAuditoria {
   CLIENTE
   PRESTAMO
   PAGO
+  SISTEMA
 }
 
 enum AccionAuditoria {
@@ -311,6 +338,8 @@ enum AccionAuditoria {
   REFINANCIAR
   CONFIRMAR
   RECHAZAR
+  ANULAR
+  PURGAR
 }
 
 model RegistroAuditoria {

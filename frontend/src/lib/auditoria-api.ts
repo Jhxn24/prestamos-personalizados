@@ -25,10 +25,13 @@ export const ETIQUETAS_ACCION: Record<AccionAuditoria, string> = {
   REFINANCIAR: "Refinanciado",
   CONFIRMAR: "Confirmado",
   RECHAZAR: "Rechazado",
+  ANULAR: "Anulado",
+  PURGAR: "Datos eliminados",
 };
 
 export const ETIQUETAS_ENTIDAD: Record<EntidadAuditoria, string> = {
   CLIENTE: "Cliente",
   PRESTAMO: "Préstamo",
   PAGO: "Pago",
+  SISTEMA: "Sistema",
 };

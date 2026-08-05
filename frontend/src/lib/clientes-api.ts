@@ -1,5 +1,10 @@
 import { apiFetch } from "./api";
-import type { ActualizarClienteInput, Cliente, CrearClienteInput } from "./types";
+import type {
+  ActualizarClienteInput,
+  Cliente,
+  CrearClienteInput,
+  GenerarAccesoClienteInput,
+} from "./types";
 
 export function listarClientes(token: string) {
   return apiFetch<Cliente[]>("/api/clientes", { token });
@@ -29,5 +34,13 @@ export function desactivarCliente(token: string, id: string) {
   return apiFetch<Cliente>(`/api/clientes/${id}/desactivar`, {
     token,
     method: "PATCH",
+  });
+}
+
+export function generarAccesoCliente(token: string, id: string, datos: GenerarAccesoClienteInput) {
+  return apiFetch<Cliente>(`/api/clientes/${id}/generar-acceso`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify(datos),
   });
 }

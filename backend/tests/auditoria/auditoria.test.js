@@ -93,7 +93,7 @@ test('RF-36: recalcular un préstamo queda registrado', async () => {
 test('RF-36: refinanciar un préstamo registra la bitácora sobre el préstamo nuevo', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
-  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin);
+  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin.id);
 
   const refinanciado = await prestamosService.refinanciarPrestamo(prestamo.id, {}, admin.id);
 
@@ -102,42 +102,30 @@ test('RF-36: refinanciar un préstamo registra la bitácora sobre el préstamo n
   assert.match(registros[0].detalle, new RegExp(prestamo.id));
 });
 
-test('RF-36/RNF-12: confirmar y rechazar un pago quedan registrados con el administrador que resolvió', async () => {
-  const prestamo = await crearPrestamo();
-  const [cuota1, cuota2] = await cuotasDe(prestamo.id);
-
-  const { pago: pagoReportado } = await pagosService.registrarPago(
-    { cuotaId: cuota1.id, monto: 300 },
-    usuarioCliente
-  );
-  await pagosService.confirmarPago(pagoReportado.id, admin.id);
-
-  const registrosConfirmacion = await auditoriaService.listar({ entidad: 'PAGO', entidadId: pagoReportado.id });
-  assert.ok(registrosConfirmacion.some((r) => r.accion === 'CREAR' && r.usuarioId === usuarioCliente.id));
-  assert.ok(registrosConfirmacion.some((r) => r.accion === 'CONFIRMAR' && r.usuarioId === admin.id));
-
-  const { pago: pagoARechazar } = await pagosService.registrarPago(
-    { cuotaId: cuota2.id, monto: 100 },
-    usuarioCliente
-  );
-  await pagosService.rechazarPago(pagoARechazar.id, admin.id, 'comprobante ilegible');
-
-  const registrosRechazo = await auditoriaService.listar({ entidad: 'PAGO', entidadId: pagoARechazar.id });
-  const rechazo = registrosRechazo.find((r) => r.accion === 'RECHAZAR');
-  assert.ok(rechazo);
-  assert.match(rechazo.detalle, /comprobante ilegible/);
-});
-
 test('RF-36: un pago directo del administrador (RF-25) se registra como CONFIRMAR', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
-  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin);
+  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin.id);
 
   const registros = await auditoriaService.listar({ entidad: 'PAGO', entidadId: pago.id });
   assert.equal(registros.length, 1);
   assert.equal(registros[0].accion, 'CONFIRMAR');
   assert.equal(registros[0].usuarioId, admin.id);
+});
+
+test('RF-36: anular un pago queda registrado con el administrador que lo anuló', async () => {
+  const prestamo = await crearPrestamo();
+  const [cuota1] = await cuotasDe(prestamo.id);
+
+  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin.id);
+  await pagosService.anularPago(pago.id, admin.id, 'marcado por error');
+
+  const registros = await auditoriaService.listar({ entidad: 'PAGO', entidadId: pago.id });
+  const anulacion = registros.find((r) => r.accion === 'ANULAR');
+  assert.ok(anulacion);
+  assert.equal(anulacion.usuarioId, admin.id);
+  assert.match(anulacion.detalle, /marcado por error/);
 });
 
 test('RF-01/02/36: alta y edición de cliente quedan registradas', async () => {

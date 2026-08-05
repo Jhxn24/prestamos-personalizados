@@ -35,18 +35,31 @@ export interface Cliente {
   telefono: string | null;
   direccion: string | null;
   activo: boolean;
-  email: string;
+  email: string | null;
+  /** false si el cliente no tiene cuenta de acceso a la app (uso local, opcional). */
+  tieneAcceso: boolean;
 }
 
-/** Body de POST /api/clientes. El backend crea la cuenta de usuario asociada. */
+/**
+ * Body de POST /api/clientes. El acceso a la app es opcional: si se manda
+ * email, password es obligatorio (y viceversa); si no se manda ninguno, el
+ * cliente queda sin cuenta y se le puede agregar después con
+ * `generarAccesoCliente`.
+ */
 export interface CrearClienteInput {
   nombre: string;
   apellido: string;
   documento: string;
-  email: string;
-  password: string;
+  email?: string;
+  password?: string;
   telefono?: string;
   direccion?: string;
+}
+
+/** Body de PATCH /api/clientes/:id/generar-acceso. */
+export interface GenerarAccesoClienteInput {
+  email: string;
+  password: string;
 }
 
 /**
@@ -93,7 +106,11 @@ export interface DashboardAdmin {
 
 export type EstadoCuota = "PENDIENTE" | "PARCIAL" | "PAGADA" | "VENCIDA";
 export type EstadoPrestamo = "ACTIVO" | "PAGADO" | "REFINANCIADO" | "CANCELADO";
-export type ModalidadPrestamo = "INTERES_FIJO" | "INTERES_SOBRE_SALDO" | "CUOTAS_FIJAS";
+export type ModalidadPrestamo =
+  | "INTERES_FIJO"
+  | "INTERES_SOBRE_SALDO"
+  | "CUOTAS_FIJAS"
+  | "CAPITAL_AL_FINAL";
 
 export interface CuotaResumen {
   numero: number;
@@ -226,7 +243,11 @@ export interface SimularPrestamoResponse {
 }
 
 export type MetodoPago = "EFECTIVO" | "TRANSFERENCIA" | "DEPOSITO" | "YAPE_PLIN" | "OTRO";
-export type EstadoPago = "PENDIENTE_CONFIRMACION" | "CONFIRMADO" | "RECHAZADO";
+/**
+ * PENDIENTE_CONFIRMACION y RECHAZADO son valores legado (ya no se producen):
+ * el admin marca un pago directamente como CONFIRMADO, o lo anula (ANULADO).
+ */
+export type EstadoPago = "PENDIENTE_CONFIRMACION" | "CONFIRMADO" | "RECHAZADO" | "ANULADO";
 export type PoliticaInteresAnticipado = "COMPLETO" | "PROPORCIONAL";
 export type PoliticaAbonoExtraordinario = "REDUCIR_CUOTA" | "REDUCIR_PLAZO";
 
@@ -270,17 +291,18 @@ export interface Pago {
   comprobanteUrl: string | null;
   observaciones: string | null;
   motivoRechazo: string | null;
+  motivoAnulacion: string | null;
   fechaPago: string;
   fechaConfirmacion: string | null;
+  fechaAnulacion: string | null;
   recibo: ReciboPago | null;
   cuota: CuotaResumenPago | null;
   prestamo: PrestamoResumenPago | null;
 }
 
 /**
- * Body de POST /api/pagos. Las políticas solo tienen efecto cuando las manda
- * el administrador (registrar = confirmar en el mismo request); un cliente
- * que reporta un pago no puede condonarse interés a sí mismo (RF-14).
+ * Body de POST /api/pagos. Solo el administrador registra pagos y se aplican
+ * de inmediato (RF-25) — no existe un paso de confirmación aparte.
  */
 export interface RegistrarPagoInput {
   cuotaId: string;
@@ -292,10 +314,9 @@ export interface RegistrarPagoInput {
   politicaAbonoExtraordinario?: PoliticaAbonoExtraordinario;
 }
 
-/** Body de POST /api/pagos/:id/confirmar. */
-export interface ConfirmarPagoInput {
-  politicaInteresAnticipado?: PoliticaInteresAnticipado;
-  politicaAbonoExtraordinario?: PoliticaAbonoExtraordinario;
+/** Body de POST /api/pagos/:id/anular. */
+export interface AnularPagoInput {
+  motivo?: string;
 }
 
 /** RF-26/27/28. */
@@ -306,6 +327,7 @@ export type TipoNotificacion =
   | "PAGO_REPORTADO"
   | "PAGO_CONFIRMADO"
   | "PAGO_RECHAZADO"
+  | "PAGO_ANULADO"
   | "RESUMEN_DIARIO_ADMIN";
 
 /** GET /api/notificaciones — notificaciones.dto.js:notificacionDTO. */
@@ -322,7 +344,7 @@ export interface Notificacion {
 }
 
 /** RF-36/RNF-12. */
-export type EntidadAuditoria = "CLIENTE" | "PRESTAMO" | "PAGO";
+export type EntidadAuditoria = "CLIENTE" | "PRESTAMO" | "PAGO" | "SISTEMA";
 
 export type AccionAuditoria =
   | "CREAR"
@@ -331,7 +353,22 @@ export type AccionAuditoria =
   | "RECALCULAR"
   | "REFINANCIAR"
   | "CONFIRMAR"
-  | "RECHAZAR";
+  | "RECHAZAR"
+  | "ANULAR"
+  | "PURGAR";
+
+/** Body de POST /api/sistema/purgar-datos. Irreversible. */
+export interface PurgarDatosInput {
+  confirmacion: string;
+  password: string;
+}
+
+export interface PurgarDatosResultado {
+  clientes: number;
+  prestamos: number;
+  pagos: number;
+  cuentasCliente: number;
+}
 
 /** GET /api/auditoria — auditoria.dto.js:registroAuditoriaDTO. */
 export interface RegistroAuditoria {

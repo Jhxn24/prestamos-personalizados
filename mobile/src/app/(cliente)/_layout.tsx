@@ -13,7 +13,6 @@ export default function ClienteTabsLayout() {
         tabBarActiveTintColor: theme.primary,
       }}>
       <Tabs.Screen name="index" options={{ title: 'Mi préstamo' }} />
-      <Tabs.Screen name="pagos" options={{ title: 'Pagos' }} />
       <Tabs.Screen name="notificaciones" options={{ title: 'Avisos' }} />
       <Tabs.Screen name="cuenta" options={{ href: null, title: 'Cuenta' }} />
     </Tabs>

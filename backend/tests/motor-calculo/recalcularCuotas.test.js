@@ -151,3 +151,50 @@ test('una única cuota pendiente concentra todo el saldo restante', () => {
   assert.equal(cuotas[0].interes.toString(), '16.67');
   assert.equal(cuotas[0].saldoCapital.toString(), '0');
 });
+
+test('capital al final: tras un abono extraordinario, las cuotas intermedias siguen siendo solo interés', () => {
+  // Préstamo de 1000 en 4 cuotas, capital al final. Tras la cuota 1 el cliente
+  // abonó capital extra y el saldo real bajó a 600 (en vez de seguir en 1000).
+  const cuotas = recalcularCuotasPendientes({
+    saldoInicial: 600,
+    capitalARepartir: 600,
+    capitalOriginal: 1000,
+    tasaPorCuota: TASA_5_MENSUAL,
+    modalidad: 'CAPITAL_AL_FINAL',
+    numeroCuotasPendientes: 3,
+  });
+
+  assert.deepEqual(cuotas.map((c) => c.capital.toString()), ['0', '0', '600']);
+  // el interés se calcula sobre el saldo REAL (600), no sobre el original (1000)
+  assert.deepEqual(cuotas.map((c) => c.interes.toString()), ['30', '30', '30']);
+  assert.deepEqual(cuotas.map((c) => c.saldoCapital.toString()), ['600', '600', '0']);
+});
+
+test('capital al final: sin abono extraordinario, el interés sigue sobre el saldo original', () => {
+  const cuotas = recalcularCuotasPendientes({
+    saldoInicial: 1000,
+    capitalARepartir: 1000,
+    capitalOriginal: 1000,
+    tasaPorCuota: TASA_5_MENSUAL,
+    modalidad: 'CAPITAL_AL_FINAL',
+    numeroCuotasPendientes: 3,
+  });
+
+  assert.deepEqual(cuotas.map((c) => c.capital.toString()), ['0', '0', '1000']);
+  assert.deepEqual(cuotas.map((c) => c.interes.toString()), ['50', '50', '50']);
+});
+
+test('capital al final: la última cuota pendiente concentra todo el saldo restante', () => {
+  const cuotas = recalcularCuotasPendientes({
+    saldoInicial: 333.34,
+    capitalARepartir: 333.34,
+    capitalOriginal: 1000,
+    tasaPorCuota: TASA_5_MENSUAL,
+    modalidad: 'CAPITAL_AL_FINAL',
+    numeroCuotasPendientes: 1,
+  });
+
+  assert.equal(cuotas[0].capital.toString(), '333.34');
+  assert.equal(cuotas[0].interes.toString(), '16.67');
+  assert.equal(cuotas[0].saldoCapital.toString(), '0');
+});

@@ -41,6 +41,8 @@ const VARIANTE_ACCION: Record<RegistroAuditoria["accion"], "default" | "secondar
   REFINANCIAR: "secondary",
   CONFIRMAR: "default",
   RECHAZAR: "destructive",
+  ANULAR: "destructive",
+  PURGAR: "destructive",
 };
 
 /** Enlace al detalle de la entidad afectada, cuando existe una página para eso. */

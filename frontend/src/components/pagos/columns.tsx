@@ -18,8 +18,7 @@ import {
 interface ColumnasPagosOpciones {
   esAdministrador: boolean;
   onVerDesglose: (pago: Pago) => void;
-  onConfirmar: (pago: Pago) => void;
-  onRechazar: (pago: Pago) => void;
+  onAnular: (pago: Pago) => void;
 }
 
 function EncabezadoOrdenable({
@@ -60,12 +59,15 @@ const METODO_LABEL: Record<string, string> = {
 
 const ESTADO_VARIANTE: Record<Pago["estado"], "default" | "secondary" | "destructive"> = {
   CONFIRMADO: "default",
+  ANULADO: "destructive",
+  // Legado: ya no se producen, pero un pago histórico podría seguir mostrándolos.
   PENDIENTE_CONFIRMACION: "secondary",
   RECHAZADO: "destructive",
 };
 
 const ESTADO_LABEL: Record<Pago["estado"], string> = {
   CONFIRMADO: "Confirmado",
+  ANULADO: "Anulado",
   PENDIENTE_CONFIRMACION: "Pendiente",
   RECHAZADO: "Rechazado",
 };
@@ -73,8 +75,7 @@ const ESTADO_LABEL: Record<Pago["estado"], string> = {
 export function crearColumnasPagos({
   esAdministrador,
   onVerDesglose,
-  onConfirmar,
-  onRechazar,
+  onAnular,
 }: ColumnasPagosOpciones): ColumnDef<Pago>[] {
   return [
     {
@@ -119,7 +120,7 @@ export function crearColumnasPagos({
       header: "",
       cell: ({ row }) => {
         const pago = row.original;
-        const pendiente = pago.estado === "PENDIENTE_CONFIRMACION";
+        const puedeAnular = pago.estado === "CONFIRMADO";
         return (
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
@@ -128,12 +129,11 @@ export function crearColumnasPagos({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onVerDesglose(pago)}>Ver desglose</DropdownMenuItem>
-              {esAdministrador && pendiente && (
+              {esAdministrador && puedeAnular && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onConfirmar(pago)}>Confirmar</DropdownMenuItem>
-                  <DropdownMenuItem variant="destructive" onClick={() => onRechazar(pago)}>
-                    Rechazar
+                  <DropdownMenuItem variant="destructive" onClick={() => onAnular(pago)}>
+                    Anular
                   </DropdownMenuItem>
                 </>
               )}

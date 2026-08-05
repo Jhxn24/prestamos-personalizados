@@ -208,7 +208,7 @@ test('el pago cubre primero la mora, luego interés y capital', async () => {
   // Paga con 5 días de atraso: mora 12.50 + interés 50 + capital 250 = 312.50
   const { pago } = await pagosService.registrarPago(
     { cuotaId: (await cuotasDe(prestamo.id))[0].id, monto: 312.5, fechaPago: '2026-04-15' },
-    admin
+    admin.id
   );
 
   assert.equal(dec(pago.moraAplicada).toFixed(2), '12.50');
@@ -226,7 +226,7 @@ test('pagar solo el importe de la cuota deja la mora pendiente y la cuota sin sa
   // Paga 300 (la cuota) pero debe 312.50 con la mora
   await pagosService.registrarPago(
     { cuotaId: (await cuotasDe(prestamo.id))[0].id, monto: 300, fechaPago: '2026-04-15' },
-    admin
+    admin.id
   );
 
   const [cuota1] = await cuotasDe(prestamo.id);
@@ -241,7 +241,7 @@ test('una cuota saldada deja de acumular mora aunque pase el tiempo', async () =
 
   await pagosService.registrarPago(
     { cuotaId: (await cuotasDe(prestamo.id))[0].id, monto: 312.5, fechaPago: '2026-04-15' },
-    admin
+    admin.id
   );
   const [pagada] = await cuotasDe(prestamo.id);
   const moraAlPagar = dec(pagada.mora).toFixed(2);
@@ -262,7 +262,7 @@ test('COMPLETO: adelantar el pago no reduce el interés', async () => {
 
   const { pago } = await pagosService.registrarPago(
     { cuotaId: cuota1.id, monto: 300, fechaPago: '2026-03-25', politicaInteresAnticipado: 'COMPLETO' },
-    admin
+    admin.id
   );
 
   assert.equal(dec(pago.interesAplicado).toFixed(2), '50.00');
@@ -285,7 +285,7 @@ test('PROPORCIONAL: se cobra solo el interés devengado hasta la fecha del pago'
       fechaPago: '2026-03-25',
       politicaInteresAnticipado: 'PROPORCIONAL',
     },
-    admin
+    admin.id
   );
 
   assert.equal(dec(pago.interesAplicado).toFixed(2), '24.19');
@@ -311,14 +311,14 @@ test('PROPORCIONAL no da descuento si se paga el día del vencimiento o después
       fechaPago: VENCE_CUOTA_1,
       politicaInteresAnticipado: 'PROPORCIONAL',
     },
-    admin
+    admin.id
   );
 
   assert.equal(dec(pago.interesAplicado).toFixed(2), '50.00');
   assert.equal(dec(pago.interesCondonado).toFixed(2), '0.00');
 });
 
-test('RF-14: el cliente NO puede condonarse interés a sí mismo', async () => {
+test('el administrador decide la política de interés anticipado directamente al marcar el pago', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
@@ -329,34 +329,18 @@ test('RF-14: el cliente NO puede condonarse interés a sí mismo', async () => {
       fechaPago: '2026-03-25',
       politicaInteresAnticipado: 'PROPORCIONAL',
     },
-    usuarioCliente
+    admin.id
   );
 
-  assert.equal(pago.politicaInteresAnticipado, 'COMPLETO', 'la política del cliente debe ignorarse');
-});
-
-test('el administrador decide el prorrateo al confirmar el pago reportado', async () => {
-  const prestamo = await crearPrestamo();
-  const [cuota1] = await cuotasDe(prestamo.id);
-
-  const { pago } = await pagosService.registrarPago(
-    { cuotaId: cuota1.id, monto: 274.19, fechaPago: '2026-03-25' },
-    usuarioCliente
-  );
-
-  const { pago: confirmado } = await pagosService.confirmarPago(pago.id, admin.id, {
-    politicaInteresAnticipado: 'PROPORCIONAL',
-  });
-
-  assert.equal(dec(confirmado.interesAplicado).toFixed(2), '24.19');
-  assert.equal(dec(confirmado.interesCondonado).toFixed(2), '25.81');
+  assert.equal(dec(pago.interesAplicado).toFixed(2), '24.19');
+  assert.equal(dec(pago.interesCondonado).toFixed(2), '25.81');
 });
 
 test('no se puede prorratear una cuota que ya tiene pagos aplicados', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
-  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 100, fechaPago: '2026-03-20' }, admin);
+  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 100, fechaPago: '2026-03-20' }, admin.id);
 
   await assert.rejects(
     () =>
@@ -367,7 +351,7 @@ test('no se puede prorratear una cuota que ya tiene pagos aplicados', async () =
           fechaPago: '2026-03-25',
           politicaInteresAnticipado: 'PROPORCIONAL',
         },
-        admin
+        admin.id
       ),
     /ya tiene pagos aplicados/
   );
@@ -384,7 +368,7 @@ test('el interés condonado no reaparece como deuda en el cronograma futuro', as
       fechaPago: '2026-03-25',
       politicaInteresAnticipado: 'PROPORCIONAL',
     },
-    admin
+    admin.id
   );
 
   const cuotas = await cuotasDe(prestamo.id);

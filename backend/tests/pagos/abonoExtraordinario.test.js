@@ -93,7 +93,7 @@ test('REDUCIR_PLAZO: el cronograma pierde las cuotas que ya no hacen falta', asy
 
   const { pago } = await pagosService.registrarPago(
     { cuotaId: cuota1.id, monto: 800, politicaAbonoExtraordinario: 'REDUCIR_PLAZO' },
-    admin
+    admin.id
   );
 
   assert.equal(dec(pago.excedente).toFixed(2), '500.00');
@@ -116,7 +116,7 @@ test('REDUCIR_CUOTA: mismo abono, se conservan las cuotas y baja su importe', as
 
   const { pago } = await pagosService.registrarPago(
     { cuotaId: cuota1.id, monto: 800, politicaAbonoExtraordinario: 'REDUCIR_CUOTA' },
-    admin
+    admin.id
   );
 
   assert.equal(dec(pago.excedente).toFixed(2), '500.00');
@@ -141,7 +141,7 @@ test('las dos políticas amortizan el mismo capital pero cobran distinto interé
       monto: 800,
       politicaAbonoExtraordinario: 'REDUCIR_PLAZO',
     },
-    admin
+    admin.id
   );
   await pagosService.registrarPago(
     {
@@ -149,7 +149,7 @@ test('las dos políticas amortizan el mismo capital pero cobran distinto interé
       monto: 800,
       politicaAbonoExtraordinario: 'REDUCIR_CUOTA',
     },
-    admin
+    admin.id
   );
 
   const [p1, p2] = await Promise.all([
@@ -179,7 +179,7 @@ test('un abono que liquida todo el capital deja el préstamo PAGADO', async () =
   // 50 de interés + 1000 de capital
   await pagosService.registrarPago(
     { cuotaId: cuota1.id, monto: 1050, politicaAbonoExtraordinario: 'REDUCIR_PLAZO' },
-    admin
+    admin.id
   );
 
   const actualizado = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
@@ -197,7 +197,7 @@ test('sin excedente la política REDUCIR_PLAZO no altera el cronograma', async (
   // Paga exactamente la cuota: no hay abono extraordinario que aplicar
   const { pago } = await pagosService.registrarPago(
     { cuotaId: cuota1.id, monto: 300, politicaAbonoExtraordinario: 'REDUCIR_PLAZO' },
-    admin
+    admin.id
   );
 
   assert.equal(dec(pago.excedente).toFixed(2), '0.00');
@@ -214,7 +214,7 @@ test('interés fijo con REDUCIR_PLAZO: menos cuotas, cada una con su interés í
 
   await pagosService.registrarPago(
     { cuotaId: cuota1.id, monto: 800, politicaAbonoExtraordinario: 'REDUCIR_PLAZO' },
-    admin
+    admin.id
   );
 
   const cuotas = await cuotasDe(prestamo.id);
@@ -233,7 +233,7 @@ test('cuotas fijas con REDUCIR_PLAZO: se conserva el importe de la anualidad', a
   // Cuota 1 = 282.01. Paga 800 -> excedente de 517.99, saldo 1000-750.00 = 250.00
   await pagosService.registrarPago(
     { cuotaId: cuotasAntes[0].id, monto: 800, politicaAbonoExtraordinario: 'REDUCIR_PLAZO' },
-    admin
+    admin.id
   );
 
   const cuotas = await cuotasDe(prestamo.id);
@@ -245,52 +245,68 @@ test('cuotas fijas con REDUCIR_PLAZO: se conserva el importe de la anualidad', a
   await verificarInvarianteDeSaldo(prestamo.id);
 });
 
-test('RF-17: el cliente no puede elegir la política del abono', async () => {
+test('el administrador decide la política de abono extraordinario directamente al marcar el pago', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
   const { pago } = await pagosService.registrarPago(
     { cuotaId: cuota1.id, monto: 800, politicaAbonoExtraordinario: 'REDUCIR_PLAZO' },
-    usuarioCliente
+    admin.id
   );
 
-  assert.equal(pago.politicaAbonoExtraordinario, 'REDUCIR_CUOTA', 'debe ignorarse la elección del cliente');
+  assert.equal(pago.cuotasEliminadas, 2);
+  const cuotas = await cuotasDe(prestamo.id);
+  assert.equal(cuotas.length, 2);
 });
 
-test('el administrador decide la política al confirmar el pago reportado', async () => {
+test('capital al final: REDUCIR_PLAZO no está soportado y falla con un error claro', async () => {
+  const prestamo = await crearPrestamo('CAPITAL_AL_FINAL');
+  const [cuota1] = await cuotasDe(prestamo.id);
+
+  await assert.rejects(
+    () =>
+      pagosService.registrarPago(
+        { cuotaId: cuota1.id, monto: 100, politicaAbonoExtraordinario: 'REDUCIR_PLAZO' },
+        admin.id
+      ),
+    /Capital al final/
+  );
+
+  // la transacción revirtió por completo: ni el pago ni el préstamo cambiaron
+  const actualizado = await prisma.prestamo.findUnique({ where: { id: prestamo.id } });
+  assert.equal(dec(actualizado.capitalPendiente).toFixed(2), '1000.00');
+});
+
+test('un pago que elimina cuotas del cronograma no se puede anular automáticamente', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
-  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 800 }, usuarioCliente);
-  assert.equal(pago.politicaAbonoExtraordinario, 'REDUCIR_CUOTA');
+  const { pago } = await pagosService.registrarPago(
+    { cuotaId: cuota1.id, monto: 800, politicaAbonoExtraordinario: 'REDUCIR_PLAZO' },
+    admin.id
+  );
 
-  const { pago: confirmado } = await pagosService.confirmarPago(pago.id, admin.id, {
-    politicaAbonoExtraordinario: 'REDUCIR_PLAZO',
-  });
-
-  assert.equal(confirmado.cuotasEliminadas, 2);
-  const cuotas = await cuotasDe(prestamo.id);
-  assert.equal(cuotas.length, 2);
+  await assert.rejects(() => pagosService.anularPago(pago.id, admin.id), /redujo el plazo/);
 });
 
 test('eliminar cuotas no rompe los pagos que las referenciaban', async () => {
   const prestamo = await crearPrestamo();
   const cuotas = await cuotasDe(prestamo.id);
 
-  // Un pago rechazado apunta a la última cuota, que luego desaparecerá
-  const { pago: rechazable } = await pagosService.registrarPago(
+  // Un pago anulado apunta a la última cuota, que luego desaparecerá
+  const { pago: anulable } = await pagosService.registrarPago(
     { cuotaId: cuotas[3].id, monto: 100 },
-    usuarioCliente
+    admin.id
   );
-  await pagosService.rechazarPago(rechazable.id, admin.id, 'prueba');
+  await pagosService.anularPago(anulable.id, admin.id, 'prueba');
 
   await pagosService.registrarPago(
     { cuotaId: cuotas[0].id, monto: 800, politicaAbonoExtraordinario: 'REDUCIR_PLAZO' },
-    admin
+    admin.id
   );
 
-  const rechazado = await prisma.pago.findUnique({ where: { id: rechazable.id } });
-  assert.equal(rechazado.estado, 'RECHAZADO', 'el registro del pago debe sobrevivir');
-  assert.equal(rechazado.cuotaId, null, 'y quedar sin cuota asociada');
-  assert.equal(dec(rechazado.monto).toFixed(2), '100.00');
+  const anulado = await prisma.pago.findUnique({ where: { id: anulable.id } });
+  assert.equal(anulado.estado, 'ANULADO', 'el registro del pago debe sobrevivir');
+  assert.equal(anulado.cuotaId, null, 'y quedar sin cuota asociada');
+  assert.equal(dec(anulado.monto).toFixed(2), '100.00');
 });

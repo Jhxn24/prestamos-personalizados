@@ -17,12 +17,14 @@ function formatearFecha(iso: string | null) {
 
 const ESTADO_VARIANTE: Record<Pago["estado"], "default" | "secondary" | "destructive"> = {
   CONFIRMADO: "default",
+  ANULADO: "destructive",
   PENDIENTE_CONFIRMACION: "secondary",
   RECHAZADO: "destructive",
 };
 
 const ESTADO_LABEL: Record<Pago["estado"], string> = {
   CONFIRMADO: "Confirmado",
+  ANULADO: "Anulado",
   PENDIENTE_CONFIRMACION: "Pendiente de confirmación",
   RECHAZADO: "Rechazado",
 };
@@ -102,6 +104,15 @@ export function VerDesglosePagoDialog({ open, onOpenChange, pago }: VerDesgloseP
             <div className="col-span-2">
               <p className="text-muted-foreground">Motivo de rechazo</p>
               <p className="font-medium">{pago.motivoRechazo}</p>
+            </div>
+          )}
+          {pago.estado === "ANULADO" && (
+            <div className="col-span-2">
+              <p className="text-muted-foreground">Anulado</p>
+              <p className="font-medium">
+                {formatearFecha(pago.fechaAnulacion)}
+                {pago.motivoAnulacion ? ` · ${pago.motivoAnulacion}` : ""}
+              </p>
             </div>
           )}
           {pago.observaciones && (

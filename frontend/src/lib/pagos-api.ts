@@ -1,5 +1,5 @@
 import { apiFetch } from "./api";
-import type { ConfirmarPagoInput, EstadoPago, Pago, RegistrarPagoInput } from "./types";
+import type { AnularPagoInput, EstadoPago, Pago, RegistrarPagoInput } from "./types";
 
 interface FiltrosPagos {
   estado?: EstadoPago;
@@ -18,11 +18,7 @@ export function obtenerPago(token: string, id: string) {
   return apiFetch<Pago>(`/api/pagos/${id}`, { token });
 }
 
-/**
- * Un solo endpoint para ambos roles (RF-21 cliente reporta, RF-25 admin
- * registra directo) — el backend decide el comportamiento según el rol del
- * token, no hace falta distinguir acá.
- */
+/** Solo el administrador registra pagos (RF-25); se aplican de inmediato. */
 export function registrarPago(token: string, datos: RegistrarPagoInput) {
   return apiFetch<Pago>("/api/pagos", {
     token,
@@ -31,18 +27,11 @@ export function registrarPago(token: string, datos: RegistrarPagoInput) {
   });
 }
 
-export function confirmarPago(token: string, id: string, datos: ConfirmarPagoInput = {}) {
-  return apiFetch<Pago>(`/api/pagos/${id}/confirmar`, {
+/** Anula un pago marcado por error, revirtiendo su efecto en el préstamo. */
+export function anularPago(token: string, id: string, datos: AnularPagoInput = {}) {
+  return apiFetch<Pago>(`/api/pagos/${id}/anular`, {
     token,
     method: "POST",
     body: JSON.stringify(datos),
-  });
-}
-
-export function rechazarPago(token: string, id: string, motivoRechazo?: string) {
-  return apiFetch<Pago>(`/api/pagos/${id}/rechazar`, {
-    token,
-    method: "POST",
-    body: JSON.stringify({ motivoRechazo }),
   });
 }

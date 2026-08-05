@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Alert, Modal, StyleSheet, View } from 'react-native';
 
 import { CondicionesFields } from '@/components/prestamos/condiciones-fields';
-import { RechazarPagoModal } from '@/components/pagos/rechazar-pago-modal';
+import { AnularPagoModal } from '@/components/pagos/anular-pago-modal';
 import { RegistrarPagoModal, type DatosRegistrarPago } from '@/components/pagos/registrar-pago-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -15,7 +15,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { confirmarPago, listarPagos, rechazarPago, registrarPago } from '@/lib/pagos-api';
+import { anularPago, listarPagos, registrarPago } from '@/lib/pagos-api';
 import {
   condicionesDesdeSimularInput,
   validarCondiciones,
@@ -42,6 +42,7 @@ const ESTADO_CUOTA_LABEL: Record<CuotaPrestamo['estado'], string> = {
 
 const ESTADO_PAGO_LABEL: Record<Pago['estado'], string> = {
   CONFIRMADO: 'Confirmado',
+  ANULADO: 'Anulado',
   PENDIENTE_CONFIRMACION: 'Pendiente',
   RECHAZADO: 'Rechazado',
 };
@@ -50,6 +51,7 @@ const MODALIDAD_LABEL: Record<string, string> = {
   INTERES_FIJO: 'Interés fijo',
   INTERES_SOBRE_SALDO: 'Interés sobre saldo',
   CUOTAS_FIJAS: 'Cuotas fijas',
+  CAPITAL_AL_FINAL: 'Capital al final',
 };
 
 type ModoAjuste = 'recalcular' | 'refinanciar' | null;
@@ -64,8 +66,7 @@ export default function PrestamoDetalleScreen() {
   const [cargando, setCargando] = useState(true);
 
   const [cuotaAPagar, setCuotaAPagar] = useState<CuotaPrestamo | null>(null);
-  const [pagoARechazar, setPagoARechazar] = useState<Pago | null>(null);
-  const [procesandoPago, setProcesandoPago] = useState<string | null>(null);
+  const [pagoAAnular, setPagoAAnular] = useState<Pago | null>(null);
 
   const [modoAjuste, setModoAjuste] = useState<ModoAjuste>(null);
   const [camposAjuste, setCamposAjuste] = useState<CamposCondiciones | null>(null);
@@ -99,23 +100,10 @@ export default function PrestamoDetalleScreen() {
     cargar();
   }
 
-  async function confirmar(pago: Pago) {
-    if (!token) return;
-    setProcesandoPago(pago.id);
-    try {
-      await confirmarPago(token, pago.id);
-      cargar();
-    } catch (error) {
-      Alert.alert('No se pudo confirmar', error instanceof ApiError ? error.message : 'Intenta de nuevo.');
-    } finally {
-      setProcesandoPago(null);
-    }
-  }
-
-  async function rechazar(motivoRechazo: string | undefined) {
-    if (!token || !pagoARechazar) return;
-    await rechazarPago(token, pagoARechazar.id, motivoRechazo);
-    setPagoARechazar(null);
+  async function anular(motivo: string | undefined) {
+    if (!token || !pagoAAnular) return;
+    await anularPago(token, pagoAAnular.id, { motivo });
+    setPagoAAnular(null);
     cargar();
   }
 
@@ -241,19 +229,11 @@ export default function PrestamoDetalleScreen() {
                 </ThemedText>
                 <Badge
                   label={ESTADO_PAGO_LABEL[pago.estado]}
-                  variant={pago.estado === 'CONFIRMADO' ? 'success' : pago.estado === 'RECHAZADO' ? 'destructive' : 'secondary'}
+                  variant={pago.estado === 'CONFIRMADO' ? 'success' : pago.estado === 'ANULADO' ? 'destructive' : 'secondary'}
                 />
               </View>
-              {pago.estado === 'PENDIENTE_CONFIRMACION' && (
-                <View style={{ flexDirection: 'row', gap: Spacing.two }}>
-                  <Button
-                    title="Rechazar"
-                    variant="destructive"
-                    onPress={() => setPagoARechazar(pago)}
-                    loading={procesandoPago === pago.id}
-                  />
-                  <Button title="Confirmar" onPress={() => confirmar(pago)} loading={procesandoPago === pago.id} />
-                </View>
+              {pago.estado === 'CONFIRMADO' && (
+                <Button title="Anular" variant="destructive" onPress={() => setPagoAAnular(pago)} />
               )}
             </View>
           ))
@@ -271,7 +251,7 @@ export default function PrestamoDetalleScreen() {
         onEnviar={registrarPagoDeCuota}
       />
 
-      <RechazarPagoModal visible={!!pagoARechazar} onCancelar={() => setPagoARechazar(null)} onEnviar={rechazar} />
+      <AnularPagoModal visible={!!pagoAAnular} onCancelar={() => setPagoAAnular(null)} onEnviar={anular} />
 
       <Modal visible={!!modoAjuste} animationType="slide" transparent onRequestClose={() => setModoAjuste(null)}>
         <View style={styles.overlay}>

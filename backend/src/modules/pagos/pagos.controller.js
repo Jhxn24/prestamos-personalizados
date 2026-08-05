@@ -22,7 +22,7 @@ async function clienteIdDelUsuario(usuario) {
   return cliente?.id ?? 'sin-cliente-asociado';
 }
 
-// RF-21 (cliente reporta) y RF-25 (administrador registra directo).
+// RF-25: el administrador marca un pago como realizado; se aplica de inmediato.
 async function registrar(req, res, next) {
   try {
     const { cuotaId, monto } = req.body;
@@ -30,7 +30,7 @@ async function registrar(req, res, next) {
       return res.status(400).json({ error: 'cuotaId y monto son obligatorios' });
     }
 
-    const { pago, error } = await pagosService.registrarPago(req.body, req.usuario);
+    const { pago, error } = await pagosService.registrarPago(req.body, req.usuario.id);
     if (error) {
       return responderError(res, error);
     }
@@ -73,13 +73,10 @@ async function obtener(req, res, next) {
   }
 }
 
-// RF-23
-async function confirmar(req, res, next) {
+// Anula un pago marcado por error, revirtiendo su efecto en el préstamo.
+async function anular(req, res, next) {
   try {
-    const { pago, error } = await pagosService.confirmarPago(req.params.id, req.usuario.id, {
-      politicaInteresAnticipado: req.body?.politicaInteresAnticipado,
-      politicaAbonoExtraordinario: req.body?.politicaAbonoExtraordinario,
-    });
+    const { pago, error } = await pagosService.anularPago(req.params.id, req.usuario.id, req.body?.motivo);
     if (error) {
       return responderError(res, error);
     }
@@ -89,21 +86,4 @@ async function confirmar(req, res, next) {
   }
 }
 
-// RF-23
-async function rechazar(req, res, next) {
-  try {
-    const { pago, error } = await pagosService.rechazarPago(
-      req.params.id,
-      req.usuario.id,
-      req.body?.motivoRechazo
-    );
-    if (error) {
-      return responderError(res, error);
-    }
-    res.json(pagoDTO(pago));
-  } catch (error) {
-    next(error);
-  }
-}
-
-module.exports = { registrar, listar, obtener, confirmar, rechazar };
+module.exports = { registrar, listar, obtener, anular };

@@ -119,7 +119,24 @@ administrador compare condiciones antes de comprometer el préstamo.
 Valores válidos: `tipoInteres` (`DIARIO`, `MENSUAL`, `ANUAL`), `frecuenciaPago`
 (`DIARIA`, `SEMANAL`, `QUINCENAL`, `MENSUAL`, `BIMESTRAL`, `TRIMESTRAL`,
 `PERSONALIZADA` — requiere `diasPersonalizados`), `modalidad` (`INTERES_FIJO`,
-`INTERES_SOBRE_SALDO`, `CUOTAS_FIJAS`).
+`INTERES_SOBRE_SALDO`, `CUOTAS_FIJAS`, `CAPITAL_AL_FINAL`).
+
+`CAPITAL_AL_FINAL` es un préstamo "bala": todas las cuotas son solo interés
+(`capital: "0"`) salvo la última, que lleva el 100% del capital más el interés
+de ese periodo. Ejemplo con `capital: 1800, numeroCuotas: 2, tasaInteres: 5,
+tipoInteres/frecuenciaPago: MENSUAL`:
+
+```json
+{
+  "cuotas": [
+    { "numero": 1, "capital": "0.00", "interes": "90.00", "total": "90.00", "saldoCapital": "1800.00" },
+    { "numero": 2, "capital": "1800.00", "interes": "90.00", "total": "1890.00", "saldoCapital": "0.00" }
+  ]
+}
+```
+
+No soporta `politicaAbonoExtraordinario: "REDUCIR_PLAZO"` en esta versión
+(ver sección de Pagos) — solo `REDUCIR_CUOTA`.
 
 ### `POST /api/prestamos` — Administrador
 
@@ -209,14 +226,16 @@ comportamiento en esta tarea):
 
 ## Pagos — `/api/pagos`
 
-### `POST /api/pagos`
+Solo el administrador marca pagos: no existe autorreporte del cliente ni un
+paso de confirmación aparte. Un pago se aplica al préstamo en el mismo
+request en que se registra (RF-25); si se marcó por error, se anula (revierte
+sus efectos) en vez de "rechazarse".
 
-Body mínimo: `cuotaId`, `monto`. El comportamiento depende del rol del token
-(no hay dos endpoints distintos):
+### `POST /api/pagos` — Administrador
 
-- **Cliente** (RF-21): el pago queda `PENDIENTE_CONFIRMACION`, no toca el
-  saldo del préstamo todavía.
-- **Administrador** (RF-25): el pago se aplica y confirma en el mismo request.
+Body mínimo: `cuotaId`, `monto`. Las políticas de interés anticipado (RF-14)
+y abono extraordinario (RF-17) se deciden en este mismo request, porque no
+hay un paso posterior donde resolverlas.
 
 ```json
 // request
@@ -224,7 +243,7 @@ Body mínimo: `cuotaId`, `monto`. El comportamiento depende del rol del token
 ```
 
 ```json
-// response 201 (registrado por el administrador → ya confirmado)
+// response 201 (ya aplicado y confirmado)
 {
   "id": "5668d797-...",
   "prestamoId": "111c8323-...",
@@ -243,8 +262,10 @@ Body mínimo: `cuotaId`, `monto`. El comportamiento depende del rol del token
   "comprobanteUrl": null,
   "observaciones": null,
   "motivoRechazo": null,
+  "motivoAnulacion": null,
   "fechaPago": "2026-08-04T00:33:31.034Z",
   "fechaConfirmacion": "2026-08-04T00:33:31.056Z",
+  "fechaAnulacion": null,
   "recibo": { "numero": 502, "monto": "367.21", "fechaEmision": "2026-08-04T00:33:31.059Z" },
   "cuota": { "id": "d9794e57-...", "numero": 1, "estado": "PAGADA", "total": "367.21", "montoPagado": "367.21" },
   "prestamo": { "id": "111c8323-...", "clienteId": "3c8047ff-...", "estado": "ACTIVO", "capitalPendiente": "682.79" }
@@ -252,23 +273,38 @@ Body mínimo: `cuotaId`, `monto`. El comportamiento depende del rol del token
 ```
 
 Shape producido por `pagos.dto.js` (`pagoDTO`), usado en `registrar`, `listar`,
-`obtener`, `confirmar` y `rechazar`. Deja fuera `registradoPorId` /
-`confirmadoPorId` (ids sin un join útil hoy) y `createdAt`/`updatedAt`; todos
-los montos van a 2 decimales.
+`obtener` y `anular`. Deja fuera `registradoPorId` / `confirmadoPorId` /
+`anuladoPorId` (ids sin un join útil hoy) y `createdAt`/`updatedAt`; todos los
+montos van a 2 decimales.
 
 `metodo` acepta `EFECTIVO`, `TRANSFERENCIA`, `DEPOSITO`, `YAPE_PLIN`, `OTRO`.
 Errores de negocio (cuota ya pagada, préstamo no activo, monto ≤ 0, pago que
-excede la deuda) responden `400` con `{ "error": "..." }` vía el
-`errorHandler` central.
+excede la deuda, `REDUCIR_PLAZO` sobre un préstamo `CAPITAL_AL_FINAL`)
+responden `400` con `{ "error": "..." }` vía el `errorHandler` central.
+
+### `POST /api/pagos/:id/anular` — Administrador
+
+Revierte un pago marcado por error: el capital pendiente del préstamo, la
+cuota y el recibo vuelven exactamente al estado previo a ese pago. Body
+opcional: `{ "motivo": "..." }`.
+
+Solo se puede anular el pago `CONFIRMADO` **más reciente** de un préstamo
+(si hay uno posterior, hay que anular ese primero) y solo si no eliminó
+cuotas del cronograma al aplicarse (abono extraordinario con
+`REDUCIR_PLAZO`) — en ese caso el ajuste se hace manualmente. `400` con un
+mensaje descriptivo si no se cumple alguna de estas condiciones.
+
+```json
+// response 200
+{ "...": "mismo shape que POST, con estado: \"ANULADO\", motivoAnulacion, fechaAnulacion" }
+```
 
 Otros endpoints ya existentes:
 
 | Método | Ruta | Rol | Descripción |
 |---|---|---|---|
-| GET | `/api/pagos` | Ambos | Lista, filtros `?estado=` `?prestamoId=` |
+| GET | `/api/pagos` | Ambos | Lista, filtros `?estado=` (`CONFIRMADO`\|`ANULADO`) `?prestamoId=` |
 | GET | `/api/pagos/:id` | Ambos | Detalle |
-| POST | `/api/pagos/:id/confirmar` | Admin | RF-23, aquí se resuelve interés anticipado (RF-14) y abono extraordinario (RF-17) |
-| POST | `/api/pagos/:id/rechazar` | Admin | RF-23 |
 
 ---
 
@@ -278,8 +314,13 @@ Otros endpoints ya existentes:
 asociada y deja fuera `usuarioId`, `rol` (siempre `CLIENTE`) y
 `createdAt`/`updatedAt`.
 
+El acceso a la app es **opcional** (uso local del prestamista): `email` y
+`password` no son obligatorios al crear un cliente — si se manda uno, se
+exige el otro; si no se manda ninguno, el cliente queda sin cuenta
+(`tieneAcceso: false`, `email: null`) y se le puede agregar acceso después.
+
 ```json
-// response 201 de POST /api/clientes
+// response 201 de POST /api/clientes (sin email/password)
 {
   "id": "3c8047ff-...",
   "nombre": "Juana",
@@ -288,11 +329,21 @@ asociada y deja fuera `usuarioId`, `rol` (siempre `CLIENTE`) y
   "telefono": "999888777",
   "direccion": null,
   "activo": true,
-  "email": "juana.perez@example.com"
+  "email": null,
+  "tieneAcceso": false
 }
 ```
 
 `GET /`, `GET /:id`, `PUT /:id` y `PATCH /:id/desactivar` devuelven el mismo shape.
+
+### `PATCH /api/clientes/:id/generar-acceso` — Administrador
+
+Agrega una cuenta de acceso a un cliente que no tenía. Body obligatorio:
+`{ "email": "...", "password": "..." }`.
+
+`404` si el cliente no existe. `409` (`CLIENTE_YA_TIENE_ACCESO`) si ya tiene
+una cuenta — esta vía es de un solo uso, no reemplaza credenciales
+existentes.
 
 ---
 
@@ -377,9 +428,9 @@ filas en la tabla `Notificacion` que cada rol consulta con su propio token
 
 Se generan de dos formas:
 
-- **Por evento**, desde `pagos.service.js`: reportar (RF-21), confirmar y
-  rechazar un pago (RF-23) disparan la notificación correspondiente en el
-  momento.
+- **Por evento**, desde `pagos.service.js`: registrar un pago (RF-25) o
+  anularlo disparan la notificación correspondiente en el momento. Un
+  cliente sin cuenta de acceso (acceso opcional) simplemente no recibe nada.
 - **Por barrido diario**, vía `node-cron` (`src/jobs/notificaciones.job.js`),
   todos los días a las 08:00 hora del servidor. El barrido es idempotente: no
   duplica avisos si se corre más de una vez el mismo día.
@@ -406,9 +457,10 @@ Las últimas 100 notificaciones del usuario autenticado, más nuevas primero.
 ```
 
 `tipo` es uno de: `CUOTA_POR_VENCER_SEMANA`, `CUOTA_POR_VENCER_DIA`,
-`CUOTA_VENCE_HOY` (RF-26); `PAGO_REPORTADO`, `PAGO_CONFIRMADO`,
-`PAGO_RECHAZADO` (RF-27, y `PAGO_REPORTADO` también llega al administrador
-por RF-28); `RESUMEN_DIARIO_ADMIN` (RF-28).
+`CUOTA_VENCE_HOY` (RF-26); `PAGO_CONFIRMADO` (RF-27, al registrar un pago);
+`PAGO_ANULADO` (al anular uno); `RESUMEN_DIARIO_ADMIN` (RF-28).
+`PAGO_REPORTADO` y `PAGO_RECHAZADO` son valores legado del enum, ya no se
+producen (el cliente ya no autorreporta pagos).
 
 ### `GET /api/notificaciones/no-leidas/contador`
 
@@ -439,19 +491,53 @@ recuperar el día si el proceso estuvo caído a esa hora; el body admite
 
 ---
 
+## Sistema — `/api/sistema` (Administrador)
+
+### `POST /api/sistema/purgar-datos`
+
+La operación más destructiva del sistema: borra **permanentemente** todos los
+`Cliente`, `Prestamo` (con sus `Cuota`, `Pago`, `Recibo` y `PagoSnapshot` en
+cascada) y las cuentas de acceso de cliente (`Usuario` con `rol: CLIENTE`).
+Irreversible, sin papelera. La bitácora de auditoría (`RegistroAuditoria`) no
+se toca — incluso queda un registro de esta misma acción — y el propio
+administrador que la ejecuta sobrevive.
+
+Exige dos confirmaciones en el body, no solo un click en la UI:
+
+```json
+// request
+{ "confirmacion": "ELIMINAR TODO", "password": "la-contraseña-del-admin" }
+```
+
+`confirmacion` debe ser exactamente el string `"ELIMINAR TODO"` (sensible a
+mayúsculas y espacios) — `400` (`CONFIRMACION_INVALIDA`) si no calza.
+`password` debe ser la contraseña actual del administrador que hace la
+petición — `401` (`PASSWORD_INVALIDA`) si no coincide. Ninguna de las dos
+validaciones toca la base de datos.
+
+```json
+// response 200
+{ "clientes": 12, "prestamos": 15, "pagos": 43, "cuentasCliente": 8 }
+```
+
+---
+
 ## Auditoría — `/api/auditoria` (Administrador)
 
 Bitácora de cambios relevantes (RF-36, RNF-12): quién hizo qué, cuándo, sobre
 qué registro. Se alimenta desde los propios servicios de negocio — no hay un
 paso manual — cada vez que ocurre una de estas acciones:
 
-- **Cliente**: alta (RF-01), edición (RF-02, con el detalle de qué campos
-  cambiaron) y baja (RF-02).
+- **Cliente**: alta (RF-01, con o sin cuenta de acceso), edición (RF-02, con
+  el detalle de qué campos cambiaron), generación de acceso posterior y baja
+  (RF-02).
 - **Préstamo**: alta (RF-05), recálculo (RF-09) y refinanciamiento (RF-08, el
   registro queda sobre el préstamo nuevo y referencia el id del original).
-- **Pago**: reporte del cliente (RF-21) o registro directo del administrador
-  (RF-25, que se guarda como `CONFIRMAR` porque se aplica de inmediato),
-  confirmación y rechazo de un pago reportado (RF-23).
+- **Pago**: registro directo del administrador (RF-25, se guarda como
+  `CONFIRMAR` porque se aplica de inmediato) y anulación de un pago
+  (`ANULAR`).
+- **Sistema**: borrado masivo de todos los clientes/préstamos/pagos
+  (`PURGAR`, entidad `SISTEMA`, `entidadId: "GLOBAL"`) — ver arriba.
 
 ### `GET /api/auditoria`
 
@@ -460,7 +546,7 @@ y combinables por query string:
 
 | Parámetro   | Valores                              |
 | ----------- | ------------------------------------- |
-| `entidad`   | `CLIENTE`, `PRESTAMO`, `PAGO`          |
+| `entidad`   | `CLIENTE`, `PRESTAMO`, `PAGO`, `SISTEMA` |
 | `entidadId` | id de la entidad afectada             |
 | `usuarioId` | quién hizo el cambio                  |
 | `desde`     | fecha ISO (inclusive)                 |
@@ -481,7 +567,9 @@ y combinables por query string:
 ```
 
 `accion` es uno de: `CREAR`, `ACTUALIZAR`, `DESACTIVAR`, `RECALCULAR`,
-`REFINANCIAR`, `CONFIRMAR`, `RECHAZAR`.
+`REFINANCIAR`, `CONFIRMAR`, `ANULAR`, `PURGAR`. `RECHAZAR` es un valor legado
+del enum, ya no se produce. `entidad` es uno de: `CLIENTE`, `PRESTAMO`,
+`PAGO`, `SISTEMA`.
 
 ---
 

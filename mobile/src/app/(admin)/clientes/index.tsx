@@ -42,7 +42,9 @@ export default function ClientesListScreen() {
     const termino = busqueda.trim().toLowerCase();
     if (!termino) return clientes;
     return clientes.filter((cliente) =>
-      `${cliente.nombre} ${cliente.apellido} ${cliente.documento} ${cliente.email}`.toLowerCase().includes(termino)
+      `${cliente.nombre} ${cliente.apellido} ${cliente.documento} ${cliente.email ?? ''}`
+        .toLowerCase()
+        .includes(termino)
     );
   }, [clientes, busqueda]);
 
@@ -69,7 +71,8 @@ export default function ClientesListScreen() {
                   {cliente.nombre} {cliente.apellido}
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  {cliente.documento} · {cliente.email}
+                  {cliente.documento}
+                  {cliente.tieneAcceso ? ` · ${cliente.email}` : ' · Sin acceso'}
                 </ThemedText>
               </View>
               <Badge label={cliente.activo ? 'Activo' : 'Inactivo'} variant={cliente.activo ? 'default' : 'secondary'} />

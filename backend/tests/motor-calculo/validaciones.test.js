@@ -31,8 +31,8 @@ test('rechaza tipo de interés y frecuencia desconocidos', () => {
   assert.throws(() => generarCronograma({ ...BASE, frecuenciaPago: 'ANUAL' }), /frecuenciaPago/);
 });
 
-test('acepta las tres modalidades del negocio', () => {
-  for (const modalidad of ['INTERES_FIJO', 'INTERES_SOBRE_SALDO', 'CUOTAS_FIJAS']) {
+test('acepta las cuatro modalidades del negocio', () => {
+  for (const modalidad of ['INTERES_FIJO', 'INTERES_SOBRE_SALDO', 'CUOTAS_FIJAS', 'CAPITAL_AL_FINAL']) {
     const { cuotas } = generarCronograma({ ...BASE, modalidad });
     assert.equal(cuotas.length, BASE.numeroCuotas, `falló con ${modalidad}`);
   }

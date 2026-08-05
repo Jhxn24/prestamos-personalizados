@@ -9,9 +9,10 @@ import { Card } from '@/components/ui/card';
 import { Screen } from '@/components/ui/screen';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
+import { GenerarAccesoModal } from '@/components/clientes/generar-acceso-modal';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { actualizarCliente, desactivarCliente, obtenerCliente } from '@/lib/clientes-api';
+import { actualizarCliente, desactivarCliente, generarAccesoCliente, obtenerCliente } from '@/lib/clientes-api';
 import { listarPrestamos } from '@/lib/prestamos-api';
 import type { Cliente, Prestamo } from '@/lib/types';
 
@@ -44,6 +45,7 @@ export default function ClienteDetalleScreen() {
   const [campos, setCampos] = useState<CamposEdicion | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [desactivando, setDesactivando] = useState(false);
+  const [generarAccesoVisible, setGenerarAccesoVisible] = useState(false);
 
   useEffect(() => {
     if (!token || !id) return;
@@ -113,7 +115,9 @@ export default function ClienteDetalleScreen() {
     if (!cliente) return;
     Alert.alert(
       `¿Desactivar a ${cliente.nombre} ${cliente.apellido}?`,
-      'El cliente y su cuenta de acceso quedarán inactivos. No hay una acción para reactivarlo desde aquí.',
+      cliente.tieneAcceso
+        ? 'El cliente y su cuenta de acceso quedarán inactivos. No hay una acción para reactivarlo desde aquí.'
+        : 'El cliente quedará inactivo. No hay una acción para reactivarlo desde aquí.',
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Desactivar', style: 'destructive', onPress: desactivar },
@@ -131,6 +135,13 @@ export default function ClienteDetalleScreen() {
     } finally {
       setDesactivando(false);
     }
+  }
+
+  async function generarAcceso(email: string, password: string) {
+    if (!token || !cliente) return;
+    const actualizado = await generarAccesoCliente(token, cliente.id, { email, password });
+    setCliente(actualizado);
+    setGenerarAccesoVisible(false);
   }
 
   const puedeRegistrarPrestamo = useMemo(() => cliente?.activo ?? false, [cliente]);
@@ -170,7 +181,7 @@ export default function ClienteDetalleScreen() {
               Teléfono: {cliente.telefono ?? '—'}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Email: {cliente.email}
+              {cliente.tieneAcceso ? `Email: ${cliente.email}` : 'Sin acceso a la app'}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               Dirección: {cliente.direccion ?? '—'}
@@ -183,6 +194,9 @@ export default function ClienteDetalleScreen() {
                 disabled={!cliente.activo || desactivando}
                 onPress={confirmarDesactivar}
               />
+              {!cliente.tieneAcceso && (
+                <Button title="Generar acceso" variant="secondary" onPress={() => setGenerarAccesoVisible(true)} />
+              )}
               {puedeRegistrarPrestamo && (
                 <Button
                   title="Registrar préstamo"
@@ -212,6 +226,12 @@ export default function ClienteDetalleScreen() {
           ))}
         </Card>
       )}
+
+      <GenerarAccesoModal
+        visible={generarAccesoVisible}
+        onCancelar={() => setGenerarAccesoVisible(false)}
+        onEnviar={generarAcceso}
+      />
     </Screen>
   );
 }

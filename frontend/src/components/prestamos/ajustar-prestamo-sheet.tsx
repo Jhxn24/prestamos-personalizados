@@ -51,6 +51,7 @@ const MODALIDADES: { value: ModalidadPrestamo; label: string }[] = [
   { value: "INTERES_FIJO", label: "Interés fijo" },
   { value: "INTERES_SOBRE_SALDO", label: "Interés sobre saldo" },
   { value: "CUOTAS_FIJAS", label: "Cuotas fijas" },
+  { value: "CAPITAL_AL_FINAL", label: "Capital al final" },
 ];
 
 interface CamposForm {

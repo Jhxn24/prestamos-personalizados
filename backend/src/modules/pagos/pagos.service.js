@@ -34,6 +34,9 @@ async function notificarCliente(pagoId, { tipo, titulo, mensaje }) {
   });
   if (!pago) return;
 
+  // Un cliente sin cuenta de acceso (RF-04 opcional) no tiene a quién notificar.
+  if (!pago.prestamo.cliente.usuarioId) return;
+
   await notificacionesService.crear({
     usuarioId: pago.prestamo.cliente.usuarioId,
     tipo,
@@ -46,12 +49,10 @@ async function notificarCliente(pagoId, { tipo, titulo, mensaje }) {
 }
 
 /**
- * Reporte de pago del cliente (RF-21) o registro directo del administrador (RF-25).
+ * Registro directo de un pago por el administrador (RF-25).
  *
- * Un pago reportado por el cliente nace PENDIENTE_CONFIRMACION y NO toca el
- * préstamo (RF-22): la contabilidad solo se mueve al confirmar. El pago que
- * registra el administrador se da por confirmado en el acto, porque es él quien
- * recibió el dinero.
+ * Ya no existe un paso de confirmación: el administrador marca el pago como
+ * realizado y se aplica al préstamo de inmediato, en el mismo acto.
  */
 async function registrarPago(
   {
@@ -64,7 +65,7 @@ async function registrarPago(
     politicaInteresAnticipado,
     politicaAbonoExtraordinario,
   },
-  usuario
+  usuarioId
 ) {
   const cuota = await prisma.cuota.findUnique({
     where: { id: cuotaId },
@@ -76,10 +77,6 @@ async function registrarPago(
   }
 
   const { prestamo } = cuota;
-
-  if (usuario.rol === 'CLIENTE' && prestamo.cliente.usuarioId !== usuario.id) {
-    return { error: 'SIN_ACCESO' };
-  }
 
   if (prestamo.estado !== 'ACTIVO') {
     throw new ErrorMotorCalculo(
@@ -96,8 +93,6 @@ async function registrarPago(
     throw new ErrorMotorCalculo('El monto del pago debe ser mayor a 0');
   }
 
-  const esAdministrador = usuario.rol === 'ADMINISTRADOR';
-
   const pago = await prisma.pago.create({
     data: {
       prestamoId: prestamo.id,
@@ -107,150 +102,137 @@ async function registrarPago(
       comprobanteUrl: comprobanteUrl ?? null,
       observaciones: observaciones ?? null,
       fechaPago: fechaPago ? new Date(fechaPago) : new Date(),
-      estado: esAdministrador ? 'CONFIRMADO' : 'PENDIENTE_CONFIRMACION',
-      // RF-14: la política del interés anticipado la decide el administrador.
-      // Un cliente que reporta su pago no puede condonarse interés a sí mismo.
-      politicaInteresAnticipado: esAdministrador
-        ? politicaInteresAnticipado ?? 'COMPLETO'
-        : 'COMPLETO',
-      // RF-17: qué hacer con el excedente también lo decide el administrador.
-      politicaAbonoExtraordinario: esAdministrador
-        ? politicaAbonoExtraordinario ?? 'REDUCIR_CUOTA'
-        : 'REDUCIR_CUOTA',
-      registradoPorId: usuario.id,
+      estado: 'CONFIRMADO',
+      // RF-14/RF-17: el administrador decide estas políticas al marcar el pago.
+      politicaInteresAnticipado: politicaInteresAnticipado ?? 'COMPLETO',
+      politicaAbonoExtraordinario: politicaAbonoExtraordinario ?? 'REDUCIR_CUOTA',
+      registradoPorId: usuarioId,
     },
   });
 
-  // El pago del administrador ya viene confirmado: se aplica de inmediato.
-  if (esAdministrador) {
-    const pagoAplicado = await aplicarPago(pago.id, usuario.id);
-    await notificarCliente(pago.id, {
-      tipo: 'PAGO_CONFIRMADO',
-      titulo: 'Pago registrado',
-      mensaje: `Se registró tu pago de S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero}.`,
-    });
-    await auditoriaService.registrar({
-      usuarioId: usuario.id,
-      entidad: 'PAGO',
-      entidadId: pago.id,
-      accion: 'CONFIRMAR',
-      detalle: `Pago directo registrado por el administrador: S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero} del préstamo ${prestamo.id}.`,
-    });
-    return { pago: pagoAplicado };
-  }
-
-  // RF-27 (recibido): confirmación al cliente de que su reporte llegó.
-  // RF-28: aviso a los administradores de que hay un pago pendiente de confirmar.
+  const pagoAplicado = await aplicarPago(pago.id, usuarioId);
   await notificarCliente(pago.id, {
-    tipo: 'PAGO_REPORTADO',
-    titulo: 'Reportaste un pago',
-    mensaje: `Registramos tu pago de S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero}, pendiente de confirmación.`,
-  });
-  await notificacionesService.crearParaAdministradores({
-    tipo: 'PAGO_REPORTADO',
-    titulo: 'Nuevo pago reportado',
-    mensaje: `${prestamo.cliente.nombre} ${prestamo.cliente.apellido} reportó un pago de S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero}, pendiente de confirmar.`,
-    prestamoId: prestamo.id,
-    cuotaId: cuota.id,
-    pagoId: pago.id,
-  });
-  await auditoriaService.registrar({
-    usuarioId: usuario.id,
-    entidad: 'PAGO',
-    entidadId: pago.id,
-    accion: 'CREAR',
-    detalle: `Pago reportado por el cliente: S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero} del préstamo ${prestamo.id}, pendiente de confirmación.`,
-  });
-
-  return { pago: await obtenerPagoPorId(pago.id) };
-}
-
-/**
- * Confirma un pago reportado y lo aplica al préstamo (RF-23, RF-11).
- *
- * Es aquí donde el administrador resuelve el interés de un pago anticipado
- * (RF-14): al revisar el comprobante ve la fecha real del pago y decide si
- * cobra el periodo completo o solo lo devengado.
- */
-async function confirmarPago(
-  pagoId,
-  usuarioId,
-  { politicaInteresAnticipado, politicaAbonoExtraordinario } = {}
-) {
-  const pago = await prisma.pago.findUnique({ where: { id: pagoId } });
-
-  if (!pago) {
-    return { error: 'PAGO_NO_ENCONTRADO' };
-  }
-  if (pago.estado !== 'PENDIENTE_CONFIRMACION') {
-    throw new ErrorMotorCalculo(`Solo se puede confirmar un pago pendiente (estado actual: ${pago.estado})`);
-  }
-
-  if (politicaInteresAnticipado || politicaAbonoExtraordinario) {
-    await prisma.pago.update({
-      where: { id: pagoId },
-      data: {
-        ...(politicaInteresAnticipado ? { politicaInteresAnticipado } : {}),
-        ...(politicaAbonoExtraordinario ? { politicaAbonoExtraordinario } : {}),
-      },
-    });
-  }
-
-  const pagoAplicado = await aplicarPago(pagoId, usuarioId);
-  await notificarCliente(pagoId, {
     tipo: 'PAGO_CONFIRMADO',
-    titulo: 'Tu pago fue confirmado',
-    mensaje: `Confirmamos tu pago de S/ ${dec(pagoAplicado.monto).toFixed(2)} para la cuota #${pagoAplicado.cuota?.numero ?? ''}.`.trim(),
+    titulo: 'Pago registrado',
+    mensaje: `Se registró tu pago de S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero}.`,
   });
   await auditoriaService.registrar({
     usuarioId,
     entidad: 'PAGO',
-    entidadId: pagoId,
+    entidadId: pago.id,
     accion: 'CONFIRMAR',
-    detalle: `Pago confirmado: S/ ${dec(pagoAplicado.monto).toFixed(2)} para la cuota #${pagoAplicado.cuota?.numero ?? ''}.`.trim(),
+    detalle: `Pago registrado por el administrador: S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero} del préstamo ${prestamo.id}.`,
   });
   return { pago: pagoAplicado };
 }
 
 /**
- * Rechaza un pago reportado (RF-23). No mueve nada de la contabilidad.
+ * Anula un pago marcado por error (reemplaza al antiguo rechazar/confirmar).
+ *
+ * Solo se puede anular el pago CONFIRMADO más reciente de un préstamo (LIFO):
+ * así se garantiza que nada posterior dependió ya de sus efectos y basta con
+ * restaurar el snapshot tomado al aplicarlo, sin tener que re-derivar la
+ * inversa exacta de `aplicarPago`.
+ *
+ * Si el pago llegó a eliminar cuotas del cronograma (RF-17 reducir plazo), no
+ * se anula automáticamente: reconstruirlas de forma segura queda fuera de
+ * alcance de esta primera versión.
  */
-async function rechazarPago(pagoId, usuarioId, motivoRechazo) {
-  const pago = await prisma.pago.findUnique({ where: { id: pagoId } });
+async function anularPago(pagoId, usuarioId, motivo) {
+  const actualizado = await prisma.$transaction(async (tx) => {
+    const pago = await tx.pago.findUnique({ where: { id: pagoId }, include: { snapshot: true } });
 
-  if (!pago) {
-    return { error: 'PAGO_NO_ENCONTRADO' };
-  }
-  if (pago.estado !== 'PENDIENTE_CONFIRMACION') {
-    throw new ErrorMotorCalculo(`Solo se puede rechazar un pago pendiente (estado actual: ${pago.estado})`);
-  }
+    if (!pago) {
+      return null;
+    }
+    if (pago.estado !== 'CONFIRMADO') {
+      throw new ErrorMotorCalculo(`Solo se puede anular un pago confirmado (estado actual: ${pago.estado})`);
+    }
+    if (pago.cuotasEliminadas > 0) {
+      throw new ErrorMotorCalculo(
+        'Este pago redujo el plazo del préstamo (eliminó cuotas del cronograma); no se puede anular automáticamente.'
+      );
+    }
 
-  const actualizado = await prisma.pago.update({
-    where: { id: pagoId },
-    data: {
-      estado: 'RECHAZADO',
-      motivoRechazo: motivoRechazo ?? null,
-      confirmadoPorId: usuarioId,
-      fechaConfirmacion: new Date(),
-    },
-    include: INCLUDE_PAGO,
+    const masReciente = await tx.pago.findFirst({
+      where: { prestamoId: pago.prestamoId, estado: 'CONFIRMADO', createdAt: { gt: pago.createdAt } },
+      select: { id: true },
+    });
+    if (masReciente) {
+      throw new ErrorMotorCalculo(
+        'Solo se puede anular el pago confirmado más reciente de este préstamo; anula primero los posteriores.'
+      );
+    }
+
+    const { prestamo, cuotaPagada, cuotasModificadas } = pago.snapshot.datos;
+
+    await tx.prestamo.update({
+      where: { id: pago.prestamoId },
+      data: {
+        capitalPendiente: prestamo.capitalPendiente,
+        interesAcumulado: prestamo.interesAcumulado,
+        estado: prestamo.estado,
+      },
+    });
+
+    await tx.cuota.update({
+      where: { id: cuotaPagada.id },
+      data: {
+        interes: cuotaPagada.interes,
+        total: cuotaPagada.total,
+        capitalPagado: cuotaPagada.capitalPagado,
+        interesPagado: cuotaPagada.interesPagado,
+        moraPagada: cuotaPagada.moraPagada,
+        montoPagado: cuotaPagada.montoPagado,
+        estado: cuotaPagada.estado,
+      },
+    });
+
+    await Promise.all(
+      cuotasModificadas.map((cuota) =>
+        tx.cuota.update({
+          where: { id: cuota.id },
+          data: {
+            capital: cuota.capital,
+            interes: cuota.interes,
+            total: cuota.total,
+            saldoCapital: cuota.saldoCapital,
+          },
+        })
+      )
+    );
+
+    await tx.recibo.deleteMany({ where: { pagoId } });
+
+    return tx.pago.update({
+      where: { id: pagoId },
+      data: {
+        estado: 'ANULADO',
+        anuladoPorId: usuarioId,
+        fechaAnulacion: new Date(),
+        motivoAnulacion: motivo ?? null,
+      },
+      include: INCLUDE_PAGO,
+    });
   });
 
+  if (!actualizado) {
+    return { error: 'PAGO_NO_ENCONTRADO' };
+  }
+
   await notificarCliente(pagoId, {
-    tipo: 'PAGO_RECHAZADO',
-    titulo: 'Tu pago fue rechazado',
-    mensaje: motivoRechazo
-      ? `Rechazamos tu pago de S/ ${dec(actualizado.monto).toFixed(2)}: ${motivoRechazo}`
-      : `Rechazamos tu pago de S/ ${dec(actualizado.monto).toFixed(2)}.`,
+    tipo: 'PAGO_ANULADO',
+    titulo: 'Se anuló un pago',
+    mensaje: motivo
+      ? `Se anuló tu pago de S/ ${dec(actualizado.monto).toFixed(2)}: ${motivo}`
+      : `Se anuló tu pago de S/ ${dec(actualizado.monto).toFixed(2)}.`,
   });
   await auditoriaService.registrar({
     usuarioId,
     entidad: 'PAGO',
     entidadId: pagoId,
-    accion: 'RECHAZAR',
-    detalle: motivoRechazo
-      ? `Pago rechazado: ${motivoRechazo}`
-      : 'Pago rechazado.',
+    accion: 'ANULAR',
+    detalle: motivo ? `Pago anulado: ${motivo}` : 'Pago anulado.',
   });
 
   return { pago: actualizado };
@@ -337,7 +319,7 @@ function aplicarPago(pagoId, usuarioId) {
 
     // 7. Reescribir el cronograma futuro con el saldo real (RF-17: reducir el
     //    importe de las cuotas o el plazo, según lo que decida el administrador).
-    const cuotasEliminadas = await recalcularCronogramaFuturo(tx, {
+    const { cuotasEliminadas, cuotasModificadas } = await recalcularCronogramaFuturo(tx, {
       prestamo,
       cuotaPagada: cuota,
       nuevoCapitalPendiente,
@@ -380,6 +362,32 @@ function aplicarPago(pagoId, usuarioId) {
       where: { pagoId: pago.id },
       create: { pagoId: pago.id, monto: dec(pago.monto).toFixed(2) },
       update: {},
+    });
+
+    // 10. Guardar el estado PREVIO (préstamo, cuota pagada y cuotas futuras
+    //     regeneradas) para poder revertir este pago con `anularPago`.
+    await tx.pagoSnapshot.create({
+      data: {
+        pagoId: pago.id,
+        datos: {
+          prestamo: {
+            capitalPendiente: prestamo.capitalPendiente.toString(),
+            interesAcumulado: prestamo.interesAcumulado.toString(),
+            estado: prestamo.estado,
+          },
+          cuotaPagada: {
+            id: cuota.id,
+            interes: cuota.interes.toString(),
+            total: cuota.total.toString(),
+            capitalPagado: cuota.capitalPagado.toString(),
+            interesPagado: cuota.interesPagado.toString(),
+            moraPagada: cuota.moraPagada.toString(),
+            montoPagado: cuota.montoPagado.toString(),
+            estado: cuota.estado,
+          },
+          cuotasModificadas,
+        },
+      },
     });
 
     return tx.pago.findUnique({ where: { id: pago.id }, include: INCLUDE_PAGO });
@@ -455,7 +463,7 @@ async function recalcularCronogramaFuturo(
   );
 
   if (regenerables.length === 0) {
-    return 0;
+    return { cuotasEliminadas: 0, cuotasModificadas: [] };
   }
 
   // Capital que sigue reclamado por cuotas que NO se regeneran (parciales o
@@ -481,6 +489,16 @@ async function recalcularCronogramaFuturo(
 
   // RF-17: acortar el plazo solo tiene sentido si hubo abono extraordinario.
   const acortarPlazo = politicaAbono === 'REDUCIR_PLAZO' && excedente.gt(0);
+
+  // Capital al final no soporta reducir el plazo en esta versión: el capital
+  // está concentrado en la última cuota, no repartido parejo, así que la
+  // amortización a "capital por cuota constante" de `plazo.js` generaría un
+  // cronograma incorrecto en silencio en vez de fallar.
+  if (acortarPlazo && prestamo.modalidad === 'CAPITAL_AL_FINAL') {
+    throw new ErrorMotorCalculo(
+      'REDUCIR_PLAZO no está disponible para la modalidad Capital al final; usa REDUCIR_CUOTA.'
+    );
+  }
 
   const nuevasCuotas = acortarPlazo
     ? recalcularPlazoReducido({
@@ -509,6 +527,16 @@ async function recalcularCronogramaFuturo(
   const aRegenerar = regenerables.slice(0, nuevasCuotas.length);
   const sobrantes = regenerables.slice(nuevasCuotas.length);
 
+  // Snapshot PREVIO a la actualización, para que `anularPago` pueda restaurar
+  // exactamente estos valores.
+  const cuotasModificadas = aRegenerar.map((cuota) => ({
+    id: cuota.id,
+    capital: cuota.capital.toString(),
+    interes: cuota.interes.toString(),
+    total: cuota.total.toString(),
+    saldoCapital: cuota.saldoCapital.toString(),
+  }));
+
   await Promise.all(
     aRegenerar.map((cuota, indice) =>
       tx.cuota.update({
@@ -524,13 +552,15 @@ async function recalcularCronogramaFuturo(
   );
 
   if (sobrantes.length === 0) {
-    return 0;
+    return { cuotasEliminadas: 0, cuotasModificadas };
   }
 
   // Las cuotas que ya no hacen falta desaparecen del cronograma. Solo se
   // eliminan cuotas sin ningún abono, así que no se pierde historial de cobros;
-  // un pago rechazado que las referenciara conserva su registro con la cuota en
-  // nulo (la relación es opcional).
+  // un pago anulado que las referenciara conserva su registro con la cuota en
+  // nulo (la relación es opcional). Un pago que elimina cuotas no se puede
+  // anular automáticamente (ver `anularPago`), así que no hace falta
+  // snapshotearlas para poder restaurarlas.
   await tx.cuota.deleteMany({ where: { id: { in: sobrantes.map((cuota) => cuota.id) } } });
 
   await tx.prestamo.update({
@@ -538,7 +568,7 @@ async function recalcularCronogramaFuturo(
     data: { numeroCuotas: cuotas.length - sobrantes.length },
   });
 
-  return sobrantes.length;
+  return { cuotasEliminadas: sobrantes.length, cuotasModificadas };
 }
 
 function listarPagos({ clienteId, estado, prestamoId } = {}) {
@@ -559,8 +589,7 @@ function obtenerPagoPorId(id) {
 
 module.exports = {
   registrarPago,
-  confirmarPago,
-  rechazarPago,
+  anularPago,
   listarPagos,
   obtenerPagoPorId,
 };

@@ -100,6 +100,26 @@ function recalcularCuotasPendientes({
     });
   }
 
+  // Capital al final: las cuotas intermedias siguen siendo solo interés (sobre
+  // el saldo REAL, que si baja por un abono extraordinario) y la nueva última
+  // cuota concentra todo el capital que falta por amortizar.
+  if (modalidad === 'CAPITAL_AL_FINAL') {
+    const saldo = new Decimal(saldoInicial);
+    const interesCuota = dinero(saldo.times(tasaPorCuota));
+
+    return Array.from({ length: numeroCuotasPendientes }, (_, indice) => {
+      const esUltima = indice === numeroCuotasPendientes - 1;
+      const capitalCuota = esUltima ? new Decimal(capitalARepartir) : new Decimal(0);
+
+      return {
+        capital: capitalCuota,
+        interes: interesCuota,
+        total: capitalCuota.plus(interesCuota),
+        saldoCapital: esUltima ? saldo.minus(capitalCuota) : saldo,
+      };
+    });
+  }
+
   const partesCapital = repartirCapital(new Decimal(capitalARepartir), numeroCuotasPendientes);
 
   // En interés fijo el interés se congela sobre el capital inicial (requerimientos.md §8),

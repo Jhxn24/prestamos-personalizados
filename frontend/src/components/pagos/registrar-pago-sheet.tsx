@@ -53,15 +53,12 @@ interface RegistrarPagoSheetProps {
 }
 
 /**
- * Un solo formulario para ambos roles (RF-21 cliente reporta, RF-25 admin
- * registra directo): el backend decide el comportamiento por el rol del
- * token. Las políticas (RF-14, RF-17) solo se muestran al admin porque para
- * él registrar aplica el pago de inmediato — un cliente que reporta pasa
- * por una confirmación posterior donde el admin las decide.
+ * Solo el administrador marca pagos (RF-25): se aplican de inmediato, sin
+ * paso de confirmación aparte, así que las políticas (RF-14, RF-17) se
+ * deciden acá mismo.
  */
 export function RegistrarPagoSheet({ open, onOpenChange, cuota, onSuccess }: RegistrarPagoSheetProps) {
-  const { token, usuario } = useAuth();
-  const esAdministrador = usuario?.rol === "ADMINISTRADOR";
+  const { token } = useAuth();
 
   const [monto, setMonto] = useState("");
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
@@ -107,11 +104,10 @@ export function RegistrarPagoSheet({ open, onOpenChange, cuota, onSuccess }: Reg
         metodo,
         comprobanteUrl: comprobanteUrl.trim() || undefined,
         observaciones: observaciones.trim() || undefined,
-        ...(esAdministrador ? { politicaInteresAnticipado, politicaAbonoExtraordinario } : {}),
+        politicaInteresAnticipado,
+        politicaAbonoExtraordinario,
       });
-      toast.success(
-        esAdministrador ? "Pago registrado" : "Pago reportado, queda pendiente de confirmación"
-      );
+      toast.success("Pago registrado");
       onSuccess(pago);
       onOpenChange(false);
     } catch (error) {
@@ -125,12 +121,9 @@ export function RegistrarPagoSheet({ open, onOpenChange, cuota, onSuccess }: Reg
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex flex-col overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{esAdministrador ? "Registrar pago" : "Reportar pago"}</SheetTitle>
+          <SheetTitle>Registrar pago</SheetTitle>
           <SheetDescription>
-            {cuota ? `Cuota #${cuota.numero}` : ""}
-            {esAdministrador
-              ? " — se aplica de inmediato."
-              : " — quedará pendiente de confirmación por el administrador."}
+            {cuota ? `Cuota #${cuota.numero}` : ""} — se aplica de inmediato.
           </SheetDescription>
         </SheetHeader>
 
@@ -182,18 +175,16 @@ export function RegistrarPagoSheet({ open, onOpenChange, cuota, onSuccess }: Reg
             />
           </div>
 
-          {esAdministrador && (
-            <PoliticasPagoFields
-              politicaInteresAnticipado={politicaInteresAnticipado}
-              onPoliticaInteresAnticipadoChange={setPoliticaInteresAnticipado}
-              politicaAbonoExtraordinario={politicaAbonoExtraordinario}
-              onPoliticaAbonoExtraordinarioChange={setPoliticaAbonoExtraordinario}
-            />
-          )}
+          <PoliticasPagoFields
+            politicaInteresAnticipado={politicaInteresAnticipado}
+            onPoliticaInteresAnticipadoChange={setPoliticaInteresAnticipado}
+            politicaAbonoExtraordinario={politicaAbonoExtraordinario}
+            onPoliticaAbonoExtraordinarioChange={setPoliticaAbonoExtraordinario}
+          />
 
           <SheetFooter className="px-0">
             <Button type="submit" disabled={enviando}>
-              {enviando ? "Guardando..." : esAdministrador ? "Registrar pago" : "Reportar pago"}
+              {enviando ? "Guardando..." : "Registrar pago"}
             </Button>
           </SheetFooter>
         </form>

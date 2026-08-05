@@ -45,7 +45,7 @@ function datosDelCliente(cliente: Cliente): CamposForm {
     documento: cliente.documento,
     telefono: cliente.telefono ?? "",
     direccion: cliente.direccion ?? "",
-    email: cliente.email,
+    email: cliente.email ?? "",
     password: "",
   };
 }
@@ -95,16 +95,23 @@ export function ClienteFormSheet({
     if (!campos.apellido.trim()) nuevosErrores.apellido = "Obligatorio";
     if (!campos.documento.trim()) nuevosErrores.documento = "Obligatorio";
 
+    // El acceso a la app es opcional (uso local): si se llena uno de los dos
+    // campos, se exige el otro; si no se llena ninguno, el cliente queda sin cuenta.
     if (modo === "crear") {
-      if (!campos.email.trim()) {
-        nuevosErrores.email = "Obligatorio";
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(campos.email)) {
+      const email = campos.email.trim();
+      const password = campos.password;
+
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         nuevosErrores.email = "Email inválido";
       }
-      if (!campos.password) {
-        nuevosErrores.password = "Obligatorio";
-      } else if (campos.password.length < 6) {
+      if (password && password.length < 6) {
         nuevosErrores.password = "Mínimo 6 caracteres";
+      }
+      if (email && !password) {
+        nuevosErrores.password = "Obligatorio si se llena el email";
+      }
+      if (password && !email) {
+        nuevosErrores.email = "Obligatorio si se llena la contraseña";
       }
     }
 
@@ -118,14 +125,14 @@ export function ClienteFormSheet({
 
     setEnviando(true);
     try {
+      const email = campos.email.trim();
       const resultado =
         modo === "crear"
           ? await crearCliente(token, {
               nombre: campos.nombre.trim(),
               apellido: campos.apellido.trim(),
               documento: campos.documento.trim(),
-              email: campos.email.trim(),
-              password: campos.password,
+              ...(email && campos.password ? { email, password: campos.password } : {}),
               telefono: campos.telefono.trim() || undefined,
               direccion: campos.direccion.trim() || undefined,
             })
@@ -154,7 +161,7 @@ export function ClienteFormSheet({
           <SheetTitle>{modo === "crear" ? "Nuevo cliente" : "Editar cliente"}</SheetTitle>
           <SheetDescription>
             {modo === "crear"
-              ? "Crea el cliente y su cuenta de acceso."
+              ? "El acceso a la app es opcional: puedes agregarlo después desde el detalle del cliente."
               : "El email y la contraseña no se editan desde aquí."}
           </SheetDescription>
         </SheetHeader>
@@ -212,7 +219,7 @@ export function ClienteFormSheet({
           {modo === "crear" && (
             <>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email (opcional)</Label>
                 <Input
                   id="email"
                   type="email"
@@ -222,7 +229,7 @@ export function ClienteFormSheet({
                 {errores.email && <p className="text-sm text-destructive">{errores.email}</p>}
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="password">Contraseña</Label>
+                <Label htmlFor="password">Contraseña (opcional)</Label>
                 <Input
                   id="password"
                   type="password"

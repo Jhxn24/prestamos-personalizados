@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Alert } from 'react-native';
+import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Screen } from '@/components/ui/screen';
 import { TextField } from '@/components/ui/text-field';
+import { PurgarDatosModal } from '@/components/sistema/purgar-datos-modal';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cambiarPassword } from '@/lib/auth-api';
@@ -18,6 +20,7 @@ export function CuentaScreen() {
   const [passwordNueva, setPasswordNueva] = useState('');
   const [confirmarNueva, setConfirmarNueva] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [purgarVisible, setPurgarVisible] = useState(false);
 
   async function guardar() {
     if (!token) return;
@@ -74,6 +77,31 @@ export function CuentaScreen() {
         />
         <Button title="Cambiar contraseña" onPress={guardar} loading={enviando} />
       </Card>
+
+      {usuario?.rol === 'ADMINISTRADOR' && (
+        <Card>
+          <ThemedText type="smallBold" themeColor="destructive">
+            Zona de peligro
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Borra permanentemente todos los clientes, préstamos y pagos. No se puede deshacer.
+          </ThemedText>
+          <Button title="Eliminar todos los datos" variant="destructive" onPress={() => setPurgarVisible(true)} />
+        </Card>
+      )}
+
+      <PurgarDatosModal
+        visible={purgarVisible}
+        onCancelar={() => setPurgarVisible(false)}
+        onExito={(resultado) => {
+          setPurgarVisible(false);
+          Alert.alert(
+            'Listo',
+            `Se eliminaron ${resultado.clientes} clientes, ${resultado.prestamos} préstamos y ${resultado.pagos} pagos.`
+          );
+          router.replace('/');
+        }}
+      />
     </Screen>
   );
 }

@@ -10,8 +10,7 @@ import type { EstadoPago, Pago } from "@/lib/types";
 import { DataTable } from "@/components/ui/data-table";
 import { crearColumnasPagos } from "@/components/pagos/columns";
 import { VerDesglosePagoDialog } from "@/components/pagos/ver-desglose-pago-dialog";
-import { ConfirmarPagoDialog } from "@/components/pagos/confirmar-pago-dialog";
-import { RechazarPagoDialog } from "@/components/pagos/rechazar-pago-dialog";
+import { AnularPagoDialog } from "@/components/pagos/anular-pago-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,9 +23,8 @@ import {
 
 const OPCIONES_ESTADO: { value: string; label: string }[] = [
   { value: "TODOS", label: "Todos" },
-  { value: "PENDIENTE_CONFIRMACION", label: "Pendiente de confirmación" },
   { value: "CONFIRMADO", label: "Confirmado" },
-  { value: "RECHAZADO", label: "Rechazado" },
+  { value: "ANULADO", label: "Anulado" },
 ];
 
 function estadoValido(valor: string | null): string {
@@ -43,8 +41,7 @@ export function PagosList() {
   const [filtroEstado, setFiltroEstado] = useState(() => estadoValido(searchParams.get("estado")));
 
   const [pagoDesglose, setPagoDesglose] = useState<Pago | null>(null);
-  const [pagoConfirmar, setPagoConfirmar] = useState<Pago | null>(null);
-  const [pagoRechazar, setPagoRechazar] = useState<Pago | null>(null);
+  const [pagoAnular, setPagoAnular] = useState<Pago | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -78,8 +75,7 @@ export function PagosList() {
   const columnas = crearColumnasPagos({
     esAdministrador,
     onVerDesglose: setPagoDesglose,
-    onConfirmar: setPagoConfirmar,
-    onRechazar: setPagoRechazar,
+    onAnular: setPagoAnular,
   });
 
   return (
@@ -117,16 +113,10 @@ export function PagosList() {
         onOpenChange={(open) => !open && setPagoDesglose(null)}
         pago={pagoDesglose}
       />
-      <ConfirmarPagoDialog
-        open={!!pagoConfirmar}
-        onOpenChange={(open) => !open && setPagoConfirmar(null)}
-        pago={pagoConfirmar}
-        onSuccess={alActualizar}
-      />
-      <RechazarPagoDialog
-        open={!!pagoRechazar}
-        onOpenChange={(open) => !open && setPagoRechazar(null)}
-        pago={pagoRechazar}
+      <AnularPagoDialog
+        open={!!pagoAnular}
+        onOpenChange={(open) => !open && setPagoAnular(null)}
+        pago={pagoAnular}
         onSuccess={alActualizar}
       />
     </div>

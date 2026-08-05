@@ -1,5 +1,5 @@
 import { apiFetch } from "./api";
-import type { EstadoPago, Pago, RegistrarPagoInput } from "./types";
+import type { AnularPagoInput, EstadoPago, Pago, RegistrarPagoInput } from "./types";
 
 export function listarPagos(token: string, filtros: { estado?: EstadoPago; prestamoId?: string } = {}) {
   const query = new URLSearchParams(
@@ -8,21 +8,16 @@ export function listarPagos(token: string, filtros: { estado?: EstadoPago; prest
   return apiFetch<Pago[]>(`/api/pagos${query ? `?${query}` : ""}`, { token });
 }
 
-/** RF-21 (cliente reporta) o RF-25 (admin registra directo) — el backend decide por el rol. */
+/** RF-25 — solo el administrador registra pagos; se aplican de inmediato. */
 export function registrarPago(token: string, datos: RegistrarPagoInput) {
   return apiFetch<Pago>("/api/pagos", { token, method: "POST", body: JSON.stringify(datos) });
 }
 
-/** RF-23 — administrador. Se resuelve con las políticas por defecto (COMPLETO / REDUCIR_CUOTA). */
-export function confirmarPago(token: string, pagoId: string) {
-  return apiFetch<Pago>(`/api/pagos/${pagoId}/confirmar`, { token, method: "POST" });
-}
-
-/** RF-23 — administrador. */
-export function rechazarPago(token: string, pagoId: string, motivoRechazo?: string) {
-  return apiFetch<Pago>(`/api/pagos/${pagoId}/rechazar`, {
+/** Anula un pago marcado por error, revirtiendo su efecto en el préstamo. */
+export function anularPago(token: string, pagoId: string, datos: AnularPagoInput = {}) {
+  return apiFetch<Pago>(`/api/pagos/${pagoId}/anular`, {
     token,
     method: "POST",
-    body: JSON.stringify({ motivoRechazo }),
+    body: JSON.stringify(datos),
   });
 }

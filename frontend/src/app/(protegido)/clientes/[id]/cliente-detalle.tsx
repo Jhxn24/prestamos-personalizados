@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClienteFormSheet } from "@/components/clientes/cliente-form-sheet";
 import { DesactivarClienteDialog } from "@/components/clientes/desactivar-cliente-dialog";
+import { GenerarAccesoDialog } from "@/components/clientes/generar-acceso-dialog";
 
 export function ClienteDetalle({ id }: { id: string }) {
   const { token, usuario } = useAuth();
@@ -25,6 +26,7 @@ export function ClienteDetalle({ id }: { id: string }) {
 
   const [sheetAbierto, setSheetAbierto] = useState(false);
   const [dialogoAbierto, setDialogoAbierto] = useState(false);
+  const [generarAccesoAbierto, setGenerarAccesoAbierto] = useState(false);
 
   useEffect(() => {
     if (usuario && usuario.rol !== "ADMINISTRADOR") {
@@ -134,8 +136,17 @@ export function ClienteDetalle({ id }: { id: string }) {
             <p className="font-medium">{cliente.telefono ?? "—"}</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Email</p>
-            <p className="font-medium">{cliente.email}</p>
+            <p className="text-sm text-muted-foreground">Acceso a la app</p>
+            {cliente.tieneAcceso ? (
+              <p className="font-medium">{cliente.email}</p>
+            ) : (
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-muted-foreground">Sin acceso</p>
+                <Button variant="link" className="h-auto p-0" onClick={() => setGenerarAccesoAbierto(true)}>
+                  Generar acceso
+                </Button>
+              </div>
+            )}
           </div>
           <div className="col-span-2 sm:col-span-3">
             <p className="text-sm text-muted-foreground">Dirección</p>
@@ -155,6 +166,13 @@ export function ClienteDetalle({ id }: { id: string }) {
       <DesactivarClienteDialog
         open={dialogoAbierto}
         onOpenChange={setDialogoAbierto}
+        cliente={cliente}
+        onSuccess={setCliente}
+      />
+
+      <GenerarAccesoDialog
+        open={generarAccesoAbierto}
+        onOpenChange={setGenerarAccesoAbierto}
         cliente={cliente}
         onSuccess={setCliente}
       />

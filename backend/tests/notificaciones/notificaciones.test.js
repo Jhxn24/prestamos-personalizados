@@ -78,57 +78,57 @@ const cuotasDe = (prestamoId) =>
 const notificacionesDe = (usuarioId) =>
   prisma.notificacion.findMany({ where: { usuarioId }, orderBy: { createdAt: 'desc' } });
 
-test('RF-27/RF-28: reportar un pago notifica al cliente (recibido) y a los administradores (pendiente)', async () => {
+test('RF-25/RF-27: marcar un pago notifica al cliente que lo registró', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
-  await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, usuarioCliente);
-
-  const notifsCliente = await notificacionesDe(usuarioCliente.id);
-  assert.ok(
-    notifsCliente.some((n) => n.tipo === 'PAGO_REPORTADO' && n.cuotaId === cuota1.id),
-    'el cliente debe recibir la confirmación de que su pago fue recibido'
-  );
-
-  const notifsAdmin = await notificacionesDe(admin.id);
-  assert.ok(
-    notifsAdmin.some((n) => n.tipo === 'PAGO_REPORTADO' && n.cuotaId === cuota1.id),
-    'el administrador debe ser avisado del pago pendiente de confirmar'
-  );
-});
-
-test('RF-27: confirmar un pago notifica al cliente', async () => {
-  const prestamo = await crearPrestamo();
-  const [cuota1] = await cuotasDe(prestamo.id);
-
-  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, usuarioCliente);
-  await pagosService.confirmarPago(pago.id, admin.id);
+  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin.id);
 
   const notifs = await notificacionesDe(usuarioCliente.id);
   assert.ok(notifs.some((n) => n.tipo === 'PAGO_CONFIRMADO' && n.pagoId === pago.id));
 });
 
-test('RF-27: rechazar un pago notifica al cliente con el motivo', async () => {
+test('anular un pago notifica al cliente con el motivo', async () => {
   const prestamo = await crearPrestamo();
   const [cuota1] = await cuotasDe(prestamo.id);
 
-  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, usuarioCliente);
-  await pagosService.rechazarPago(pago.id, admin.id, 'comprobante ilegible');
+  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin.id);
+  await pagosService.anularPago(pago.id, admin.id, 'comprobante ilegible');
 
   const notifs = await notificacionesDe(usuarioCliente.id);
-  const rechazo = notifs.find((n) => n.tipo === 'PAGO_RECHAZADO' && n.pagoId === pago.id);
-  assert.ok(rechazo);
-  assert.match(rechazo.mensaje, /comprobante ilegible/);
+  const anulacion = notifs.find((n) => n.tipo === 'PAGO_ANULADO' && n.pagoId === pago.id);
+  assert.ok(anulacion);
+  assert.match(anulacion.mensaje, /comprobante ilegible/);
 });
 
-test('RF-25: un pago registrado directo por el administrador también notifica al cliente', async () => {
-  const prestamo = await crearPrestamo();
-  const [cuota1] = await cuotasDe(prestamo.id);
+test('un cliente sin cuenta de acceso no recibe notificaciones (no debe reventar)', async () => {
+  const sinCuenta = await prisma.cliente.create({
+    data: { nombre: 'Sin', apellido: 'Cuenta', documento: `${SUFIJO}-sin-cuenta` },
+  });
 
-  const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 300 }, admin);
+  try {
+    const prestamoSinCuenta = await prestamosService.crearPrestamo({
+      clienteId: sinCuenta.id,
+      capital: 500,
+      tasaInteres: 5,
+      tipoInteres: 'MENSUAL',
+      frecuenciaPago: 'MENSUAL',
+      numeroCuotas: 2,
+      modalidad: 'INTERES_FIJO',
+      fechaDesembolso: new Date(),
+    });
+    const [cuota1] = await cuotasDe(prestamoSinCuenta.id);
 
-  const notifs = await notificacionesDe(usuarioCliente.id);
-  assert.ok(notifs.some((n) => n.tipo === 'PAGO_CONFIRMADO' && n.pagoId === pago.id));
+    // No debe lanzar, aunque no haya a quién notificar.
+    const { pago } = await pagosService.registrarPago({ cuotaId: cuota1.id, monto: 100 }, admin.id);
+    assert.equal(pago.estado, 'CONFIRMADO');
+
+    await prisma.recibo.deleteMany({ where: { pago: { prestamoId: prestamoSinCuenta.id } } });
+    await prisma.pago.deleteMany({ where: { prestamoId: prestamoSinCuenta.id } });
+    await prisma.prestamo.delete({ where: { id: prestamoSinCuenta.id } });
+  } finally {
+    await prisma.cliente.delete({ where: { id: sinCuenta.id } });
+  }
 });
 
 test('RF-26: recordatorios de vencimiento (hoy, mañana, en una semana) y es idempotente', async () => {
@@ -157,6 +157,37 @@ test('RF-26: recordatorios de vencimiento (hoy, mañana, en una semana) y es ide
   // Correr el mismo barrido el mismo día no debe duplicar avisos.
   const segundaVuelta = await notificacionesService.generarRecordatoriosVencimiento(hoy);
   assert.equal(segundaVuelta, 0);
+});
+
+test('RF-26: un cliente sin cuenta de acceso no genera recordatorios (no debe reventar)', async () => {
+  const sinCuenta = await prisma.cliente.create({
+    data: { nombre: 'Sin', apellido: 'Recordatorio', documento: `${SUFIJO}-sin-recordatorio` },
+  });
+
+  try {
+    const prestamoSinCuenta = await prestamosService.crearPrestamo({
+      clienteId: sinCuenta.id,
+      capital: 500,
+      tasaInteres: 5,
+      tipoInteres: 'MENSUAL',
+      frecuenciaPago: 'MENSUAL',
+      numeroCuotas: 2,
+      modalidad: 'INTERES_FIJO',
+      fechaDesembolso: new Date(),
+    });
+    const [cuota1] = await cuotasDe(prestamoSinCuenta.id);
+
+    const hoy = new Date();
+    hoy.setUTCHours(0, 0, 0, 0);
+    await prisma.cuota.update({ where: { id: cuota1.id }, data: { fechaVencimiento: hoy } });
+
+    // No debe lanzar, aunque no haya a quién notificar.
+    await notificacionesService.generarRecordatoriosVencimiento(hoy);
+
+    await prisma.prestamo.delete({ where: { id: prestamoSinCuenta.id } });
+  } finally {
+    await prisma.cliente.delete({ where: { id: sinCuenta.id } });
+  }
 });
 
 test('RF-28: resumen diario del administrador y es idempotente', async () => {

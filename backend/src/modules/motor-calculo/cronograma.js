@@ -5,11 +5,13 @@ const { validarParametros } = require('./validaciones');
 const interesFijo = require('./modalidades/interesFijo');
 const interesSobreSaldo = require('./modalidades/interesSobreSaldo');
 const cuotasFijas = require('./modalidades/cuotasFijas');
+const capitalAlFinal = require('./modalidades/capitalAlFinal');
 
 const GENERADORES = {
   INTERES_FIJO: interesFijo,
   INTERES_SOBRE_SALDO: interesSobreSaldo,
   CUOTAS_FIJAS: cuotasFijas,
+  CAPITAL_AL_FINAL: capitalAlFinal,
 };
 
 /**
