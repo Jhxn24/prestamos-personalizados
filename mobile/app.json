@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "Prestago",
     "slug": "prestago",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,7 +8,6 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.sistemaprestamos.app"
     },
     "android": {
