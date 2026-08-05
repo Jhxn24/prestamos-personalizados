@@ -14,6 +14,18 @@ export interface LoginResponse {
   usuario: Usuario;
 }
 
+/** Body de POST /api/auth/registrar-admin — solo funciona si no existe ningún usuario aún. */
+export interface RegistrarAdminInput {
+  email: string;
+  password: string;
+}
+
+/** Body de POST /api/auth/cambiar-password. */
+export interface CambiarPasswordInput {
+  passwordActual: string;
+  passwordNueva: string;
+}
+
 /** GET/POST/PUT /api/clientes — clienteDTO en backend/clientes.dto.js. */
 export interface Cliente {
   id: string;

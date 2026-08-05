@@ -17,6 +17,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Usado por el health check del hosting (Railway/Render/etc.) para saber si el servicio está vivo.
+app.get('/health', (req, res) => res.json({ ok: true }));
+
 app.use('/api/auth', authRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/prestamos', prestamosRoutes);

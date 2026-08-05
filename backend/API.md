@@ -18,6 +18,34 @@ fechas se devuelven en ISO 8601 (UTC).
 
 ## Auth
 
+### `GET /api/auth/setup-requerido`
+
+Sin autenticación. Responde `{ "requerido": true }` mientras no exista **ningún**
+usuario en la base de datos — el frontend lo usa para mostrar "Crear cuenta de
+administrador" en vez del login la primera vez que alguien abre la app.
+
+### `POST /api/auth/registrar-admin`
+
+Bootstrap del primer administrador. Solo funciona mientras `setup-requerido`
+sea `true`; en cuanto existe cualquier usuario (admin o cliente) esta vía
+responde `409` para siempre — no es un registro público.
+
+```json
+// request
+{ "email": "admin@prestamos.local", "password": "admin123" }
+```
+
+```json
+// response 201 — mismo shape que el login
+{
+  "token": "eyJhbGciOi...",
+  "usuario": { "id": "86fe8875-...", "email": "admin@prestamos.local", "rol": "ADMINISTRADOR" }
+}
+```
+
+`400` si el email es inválido o la contraseña tiene menos de 6 caracteres.
+`409` si ya existe un usuario (`{ "error": "Ya existe un administrador registrado; pide tus credenciales." }`).
+
 ### `POST /api/auth/login`
 
 ```json
@@ -34,6 +62,19 @@ fechas se devuelven en ISO 8601 (UTC).
 ```
 
 `401` si las credenciales son inválidas.
+
+### `POST /api/auth/cambiar-password`
+
+Requiere token. Cualquier rol cambia su propia contraseña; pide la actual
+(no hay reseteo por email en este MVP).
+
+```json
+// request
+{ "passwordActual": "admin123", "passwordNueva": "unaClaveNueva123" }
+```
+
+`204` sin cuerpo si se actualizó. `400` si falta algún campo o la nueva
+contraseña tiene menos de 6 caracteres. `401` si `passwordActual` no coincide.
 
 ---
 

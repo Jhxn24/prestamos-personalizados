@@ -49,7 +49,9 @@ export function AppShell({ usuario, onLogout, children }: AppShellProps) {
         </div>
         <div className="flex items-center gap-4">
           <NotificacionesBell />
-          <span className="text-sm text-muted-foreground">{usuario.email}</span>
+          <Link href="/cuenta" className="text-sm text-muted-foreground hover:text-foreground hover:underline">
+            {usuario.email}
+          </Link>
           <Button variant="outline" size="sm" onClick={onLogout}>
             Cerrar sesión
           </Button>

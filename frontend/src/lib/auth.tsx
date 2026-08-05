@@ -17,6 +17,8 @@ interface AuthContextValue {
   /** true mientras se lee la sesión guardada en localStorage al montar. */
   cargando: boolean;
   login: (email: string, password: string) => Promise<void>;
+  /** Bootstrap: solo funciona una vez, mientras no exista ningún usuario todavía. */
+  registrarAdmin: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -59,6 +61,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsuario(respuesta.usuario);
   }
 
+  async function registrarAdmin(email: string, password: string) {
+    const respuesta = await apiFetch<LoginResponse>("/api/auth/registrar-admin", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(respuesta));
+    setToken(respuesta.token);
+    setUsuario(respuesta.usuario);
+  }
+
   function logout() {
     window.localStorage.removeItem(STORAGE_KEY);
     setToken(null);
@@ -66,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ token, usuario, cargando, login, logout }}>
+    <AuthContext.Provider value={{ token, usuario, cargando, login, registrarAdmin, logout }}>
       {children}
     </AuthContext.Provider>
   );

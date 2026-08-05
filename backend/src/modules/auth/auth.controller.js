@@ -18,4 +18,59 @@ async function login(req, res, next) {
   }
 }
 
-module.exports = { login };
+/** El frontend usa esto para decidir si muestra "Crear cuenta de administrador" en vez de login. */
+async function setupRequerido(req, res, next) {
+  try {
+    res.json({ requerido: await authService.setupRequerido() });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// RF-04-like bootstrap: solo crea el primer administrador; se cierra en cuanto exista un usuario.
+async function registrarAdmin(req, res, next) {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'email y password son obligatorios' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    }
+
+    const { resultado, error } = await authService.registrarPrimerAdmin({ email, password });
+    if (error) {
+      return res.status(409).json({ error: 'Ya existe un administrador registrado; pide tus credenciales.' });
+    }
+
+    res.status(201).json(resultado);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function cambiarPassword(req, res, next) {
+  try {
+    const { passwordActual, passwordNueva } = req.body;
+    if (!passwordActual || !passwordNueva) {
+      return res.status(400).json({ error: 'passwordActual y passwordNueva son obligatorios' });
+    }
+    if (passwordNueva.length < 6) {
+      return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
+    }
+
+    const { error } = await authService.cambiarPassword(req.usuario.id, { passwordActual, passwordNueva });
+    if (error === 'PASSWORD_ACTUAL_INVALIDA') {
+      return res.status(401).json({ error: 'La contraseña actual no es correcta' });
+    }
+
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { login, setupRequerido, registrarAdmin, cambiarPassword };
