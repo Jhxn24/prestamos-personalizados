@@ -29,6 +29,7 @@ model Usuario {
   pagosRegistrados Pago[] @relation("PagosRegistrados")
   pagosConfirmados Pago[] @relation("PagosConfirmados")
   notificaciones   Notificacion[]
+  registrosAuditoria RegistroAuditoria[]
 }
 
 model Cliente {
@@ -293,4 +294,43 @@ model Notificacion {
 
   @@index([usuarioId, leida])
   @@index([tipo, createdAt])
+}
+
+// RF-36/RNF-12: bitácora de cambios relevantes — quién, qué, cuándo.
+enum EntidadAuditoria {
+  CLIENTE
+  PRESTAMO
+  PAGO
+}
+
+enum AccionAuditoria {
+  CREAR
+  ACTUALIZAR
+  DESACTIVAR
+  RECALCULAR
+  REFINANCIAR
+  CONFIRMAR
+  RECHAZAR
+}
+
+model RegistroAuditoria {
+  id String @id @default(uuid())
+
+  // Cascade igual que Notificacion: en este sistema un Usuario nunca se borra
+  // de verdad (solo se desactiva), así que en la práctica esto no le pasa
+  // nunca a la bitácora en producción — solo simplifica la limpieza en tests.
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+
+  entidad   EntidadAuditoria
+  entidadId String
+  accion    AccionAuditoria
+  // Descripción legible del cambio (montos, campos afectados, motivo, etc.).
+  detalle   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entidad, entidadId])
+  @@index([usuarioId])
+  @@index([createdAt])
 }

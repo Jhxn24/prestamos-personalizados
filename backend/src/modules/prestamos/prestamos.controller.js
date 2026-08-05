@@ -84,7 +84,7 @@ async function crear(req, res, next) {
       });
     }
 
-    const prestamo = await prestamosService.crearPrestamo(req.body);
+    const prestamo = await prestamosService.crearPrestamo(req.body, req.usuario.id);
     res.status(201).json(prestamoDTO(prestamo));
   } catch (error) {
     next(error);
@@ -103,7 +103,7 @@ async function simular(req, res, next) {
 
 async function recalcular(req, res, next) {
   try {
-    const prestamo = await prestamosService.recalcularPrestamo(req.params.id, req.body ?? {});
+    const prestamo = await prestamosService.recalcularPrestamo(req.params.id, req.body ?? {}, req.usuario.id);
     if (!prestamo) {
       return res.status(404).json({ error: 'Préstamo no encontrado' });
     }
@@ -115,7 +115,7 @@ async function recalcular(req, res, next) {
 
 async function refinanciar(req, res, next) {
   try {
-    const prestamo = await prestamosService.refinanciarPrestamo(req.params.id, req.body ?? {});
+    const prestamo = await prestamosService.refinanciarPrestamo(req.params.id, req.body ?? {}, req.usuario.id);
     if (!prestamo) {
       return res.status(404).json({ error: 'Préstamo no encontrado' });
     }

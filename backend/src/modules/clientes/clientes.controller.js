@@ -31,7 +31,7 @@ async function crear(req, res, next) {
       });
     }
 
-    const cliente = await clientesService.crearCliente(req.body);
+    const cliente = await clientesService.crearCliente(req.body, req.usuario.id);
     res.status(201).json(clienteDTO(cliente));
   } catch (error) {
     next(error);
@@ -40,7 +40,7 @@ async function crear(req, res, next) {
 
 async function actualizar(req, res, next) {
   try {
-    const cliente = await clientesService.actualizarCliente(req.params.id, req.body);
+    const cliente = await clientesService.actualizarCliente(req.params.id, req.body, req.usuario.id);
     res.json(clienteDTO(cliente));
   } catch (error) {
     next(error);
@@ -49,7 +49,7 @@ async function actualizar(req, res, next) {
 
 async function desactivar(req, res, next) {
   try {
-    const cliente = await clientesService.desactivarCliente(req.params.id);
+    const cliente = await clientesService.desactivarCliente(req.params.id, req.usuario.id);
     res.json(clienteDTO(cliente));
   } catch (error) {
     next(error);

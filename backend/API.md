@@ -398,6 +398,52 @@ recuperar el día si el proceso estuvo caído a esa hora; el body admite
 
 ---
 
+## Auditoría — `/api/auditoria` (Administrador)
+
+Bitácora de cambios relevantes (RF-36, RNF-12): quién hizo qué, cuándo, sobre
+qué registro. Se alimenta desde los propios servicios de negocio — no hay un
+paso manual — cada vez que ocurre una de estas acciones:
+
+- **Cliente**: alta (RF-01), edición (RF-02, con el detalle de qué campos
+  cambiaron) y baja (RF-02).
+- **Préstamo**: alta (RF-05), recálculo (RF-09) y refinanciamiento (RF-08, el
+  registro queda sobre el préstamo nuevo y referencia el id del original).
+- **Pago**: reporte del cliente (RF-21) o registro directo del administrador
+  (RF-25, que se guarda como `CONFIRMAR` porque se aplica de inmediato),
+  confirmación y rechazo de un pago reportado (RF-23).
+
+### `GET /api/auditoria`
+
+Los últimos 200 registros, más nuevos primero. Todos los filtros son opcionales
+y combinables por query string:
+
+| Parámetro   | Valores                              |
+| ----------- | ------------------------------------- |
+| `entidad`   | `CLIENTE`, `PRESTAMO`, `PAGO`          |
+| `entidadId` | id de la entidad afectada             |
+| `usuarioId` | quién hizo el cambio                  |
+| `desde`     | fecha ISO (inclusive)                 |
+| `hasta`     | fecha ISO (inclusive)                 |
+
+```json
+[
+  {
+    "id": "9c1a...",
+    "entidad": "PAGO",
+    "entidadId": "4cf4a07b-...",
+    "accion": "CONFIRMAR",
+    "detalle": "Pago confirmado: S/ 300.00 para la cuota #1.",
+    "usuario": { "email": "admin@prestamos.local", "rol": "ADMINISTRADOR" },
+    "createdAt": "2026-08-04T17:22:41.000Z"
+  }
+]
+```
+
+`accion` es uno de: `CREAR`, `ACTUALIZAR`, `DESACTIVAR`, `RECALCULAR`,
+`REFINANCIAR`, `CONFIRMAR`, `RECHAZAR`.
+
+---
+
 ## Capa de DTOs
 
 Cada módulo que devuelve datos al frontend tiene su propio archivo
@@ -417,7 +463,8 @@ directamente, así que no tiene un archivo `.dto.js` separado.
 
 Del MVP descrito en `requerimientos.md` §9.1, lo único que faltaba exponer era
 el dashboard (RF-29/RF-30), ya cubierto arriba. Notificaciones (RF-26 a
-RF-28) ya está cubierto en la sección de arriba. De la Fase 2 (§9.2) quedan
-pendientes: **reportes exportables a Excel/PDF** (RF-32, hoy solo hay CSV),
-firma digital (RF-34), escaneo de DNI (RF-35), bitácora de auditoría (RF-36)
-y la app móvil (RF-37).
+RF-28) y bitácora de auditoría (RF-36) ya están cubiertas en las secciones de
+arriba. De la Fase 2 (§9.2) quedan pendientes: adjuntar documentos al cliente
+y al préstamo (RF-03, RF-33), **reportes exportables a Excel/PDF** (RF-32, hoy
+solo hay CSV), firma digital (RF-34), escaneo de DNI (RF-35) y la app móvil
+(RF-37).

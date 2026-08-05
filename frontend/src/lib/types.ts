@@ -308,3 +308,26 @@ export interface Notificacion {
   pagoId: string | null;
   createdAt: string;
 }
+
+/** RF-36/RNF-12. */
+export type EntidadAuditoria = "CLIENTE" | "PRESTAMO" | "PAGO";
+
+export type AccionAuditoria =
+  | "CREAR"
+  | "ACTUALIZAR"
+  | "DESACTIVAR"
+  | "RECALCULAR"
+  | "REFINANCIAR"
+  | "CONFIRMAR"
+  | "RECHAZAR";
+
+/** GET /api/auditoria — auditoria.dto.js:registroAuditoriaDTO. */
+export interface RegistroAuditoria {
+  id: string;
+  entidad: EntidadAuditoria;
+  entidadId: string;
+  accion: AccionAuditoria;
+  detalle: string | null;
+  usuario: { email: string; rol: Rol };
+  createdAt: string;
+}

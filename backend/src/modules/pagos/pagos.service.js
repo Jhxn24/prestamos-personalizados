@@ -12,6 +12,7 @@ const {
 } = require('../motor-calculo');
 const { actualizarMoraDePrestamo } = require('../mora/mora.service');
 const notificacionesService = require('../notificaciones/notificaciones.service');
+const auditoriaService = require('../auditoria/auditoria.service');
 
 const INCLUDE_PAGO = {
   recibo: true,
@@ -128,6 +129,13 @@ async function registrarPago(
       titulo: 'Pago registrado',
       mensaje: `Se registró tu pago de S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero}.`,
     });
+    await auditoriaService.registrar({
+      usuarioId: usuario.id,
+      entidad: 'PAGO',
+      entidadId: pago.id,
+      accion: 'CONFIRMAR',
+      detalle: `Pago directo registrado por el administrador: S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero} del préstamo ${prestamo.id}.`,
+    });
     return { pago: pagoAplicado };
   }
 
@@ -145,6 +153,13 @@ async function registrarPago(
     prestamoId: prestamo.id,
     cuotaId: cuota.id,
     pagoId: pago.id,
+  });
+  await auditoriaService.registrar({
+    usuarioId: usuario.id,
+    entidad: 'PAGO',
+    entidadId: pago.id,
+    accion: 'CREAR',
+    detalle: `Pago reportado por el cliente: S/ ${montoDecimal.toFixed(2)} para la cuota #${cuota.numero} del préstamo ${prestamo.id}, pendiente de confirmación.`,
   });
 
   return { pago: await obtenerPagoPorId(pago.id) };
@@ -187,6 +202,13 @@ async function confirmarPago(
     titulo: 'Tu pago fue confirmado',
     mensaje: `Confirmamos tu pago de S/ ${dec(pagoAplicado.monto).toFixed(2)} para la cuota #${pagoAplicado.cuota?.numero ?? ''}.`.trim(),
   });
+  await auditoriaService.registrar({
+    usuarioId,
+    entidad: 'PAGO',
+    entidadId: pagoId,
+    accion: 'CONFIRMAR',
+    detalle: `Pago confirmado: S/ ${dec(pagoAplicado.monto).toFixed(2)} para la cuota #${pagoAplicado.cuota?.numero ?? ''}.`.trim(),
+  });
   return { pago: pagoAplicado };
 }
 
@@ -220,6 +242,15 @@ async function rechazarPago(pagoId, usuarioId, motivoRechazo) {
     mensaje: motivoRechazo
       ? `Rechazamos tu pago de S/ ${dec(actualizado.monto).toFixed(2)}: ${motivoRechazo}`
       : `Rechazamos tu pago de S/ ${dec(actualizado.monto).toFixed(2)}.`,
+  });
+  await auditoriaService.registrar({
+    usuarioId,
+    entidad: 'PAGO',
+    entidadId: pagoId,
+    accion: 'RECHAZAR',
+    detalle: motivoRechazo
+      ? `Pago rechazado: ${motivoRechazo}`
+      : 'Pago rechazado.',
   });
 
   return { pago: actualizado };

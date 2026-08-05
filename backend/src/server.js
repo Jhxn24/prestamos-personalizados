@@ -8,6 +8,7 @@ const prestamosRoutes = require('./routes/prestamos.routes');
 const pagosRoutes = require('./routes/pagos.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const notificacionesRoutes = require('./routes/notificaciones.routes');
+const auditoriaRoutes = require('./routes/auditoria.routes');
 const errorHandler = require('./middlewares/errorHandler');
 const notificacionesJob = require('./jobs/notificaciones.job');
 
@@ -22,6 +23,7 @@ app.use('/api/prestamos', prestamosRoutes);
 app.use('/api/pagos', pagosRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notificaciones', notificacionesRoutes);
+app.use('/api/auditoria', auditoriaRoutes);
 
 app.use(errorHandler);
 

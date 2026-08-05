@@ -1,5 +1,6 @@
 const prisma = require('../../config/prisma');
 const { generarCronograma, ErrorMotorCalculo } = require('../motor-calculo');
+const auditoriaService = require('../auditoria/auditoria.service');
 
 const INCLUDE_CRONOGRAMA = {
   cuotas: { orderBy: { numero: 'asc' } },
@@ -60,7 +61,7 @@ function simular(datos) {
 /**
  * Registra un préstamo y su cronograma inicial (RF-05, RF-06, RF-07, RF-18).
  */
-async function crearPrestamo(datos) {
+async function crearPrestamo(datos, usuarioId) {
   const cliente = await prisma.cliente.findUnique({ where: { id: datos.clienteId } });
   if (!cliente) {
     throw new ErrorMotorCalculo('El cliente indicado no existe');
@@ -72,7 +73,7 @@ async function crearPrestamo(datos) {
   const parametros = parametrosDelMotor(datos);
   const { cuotas } = generarCronograma(parametros);
 
-  return prisma.prestamo.create({
+  const prestamo = await prisma.prestamo.create({
     data: {
       clienteId: datos.clienteId,
       capital: parametros.capital.toString(),
@@ -92,6 +93,16 @@ async function crearPrestamo(datos) {
     },
     include: INCLUDE_CRONOGRAMA,
   });
+
+  await auditoriaService.registrar({
+    usuarioId,
+    entidad: 'PRESTAMO',
+    entidadId: prestamo.id,
+    accion: 'CREAR',
+    detalle: `Préstamo registrado: capital S/ ${parametros.capital.toString()}, ${parametros.numeroCuotas} cuotas, modalidad ${parametros.modalidad}.`,
+  });
+
+  return prestamo;
 }
 
 function listarPrestamos({ clienteId } = {}) {
@@ -121,7 +132,7 @@ async function obtenerCronograma(id) {
  * porque borrar las cuotas viejas y crear las nuevas debe ser atómico: un
  * préstamo sin cronograma es un estado inválido para el negocio.
  */
-async function recalcularPrestamo(id, ajustes) {
+async function recalcularPrestamo(id, ajustes, usuarioId) {
   const prestamo = await prisma.prestamo.findUnique({ where: { id }, include: { cuotas: true } });
   if (!prestamo) {
     return null;
@@ -150,7 +161,7 @@ async function recalcularPrestamo(id, ajustes) {
 
   const { cuotas } = generarCronograma(parametros);
 
-  return prisma.$transaction(async (tx) => {
+  const actualizado = await prisma.$transaction(async (tx) => {
     await tx.cuota.deleteMany({ where: { prestamoId: id } });
 
     return tx.prestamo.update({
@@ -170,13 +181,23 @@ async function recalcularPrestamo(id, ajustes) {
       include: INCLUDE_CRONOGRAMA,
     });
   });
+
+  await auditoriaService.registrar({
+    usuarioId,
+    entidad: 'PRESTAMO',
+    entidadId: id,
+    accion: 'RECALCULAR',
+    detalle: `Préstamo recalculado: capital S/ ${parametros.capital.toString()}, ${parametros.numeroCuotas} cuotas.`,
+  });
+
+  return actualizado;
 }
 
 /**
  * Refinancia un préstamo (RF-08): cierra el original y crea uno nuevo cuyo
  * capital es el saldo pendiente, con las condiciones que defina el administrador.
  */
-async function refinanciarPrestamo(id, condiciones) {
+async function refinanciarPrestamo(id, condiciones, usuarioId) {
   const original = await prisma.prestamo.findUnique({ where: { id } });
   if (!original) {
     return null;
@@ -206,7 +227,7 @@ async function refinanciarPrestamo(id, condiciones) {
 
   const { cuotas } = generarCronograma(parametros);
 
-  return prisma.$transaction(async (tx) => {
+  const nuevoPrestamo = await prisma.$transaction(async (tx) => {
     await tx.prestamo.update({ where: { id }, data: { estado: 'REFINANCIADO' } });
 
     return tx.prestamo.create({
@@ -227,6 +248,16 @@ async function refinanciarPrestamo(id, condiciones) {
       include: INCLUDE_CRONOGRAMA,
     });
   });
+
+  await auditoriaService.registrar({
+    usuarioId,
+    entidad: 'PRESTAMO',
+    entidadId: nuevoPrestamo.id,
+    accion: 'REFINANCIAR',
+    detalle: `Refinanciado desde el préstamo ${original.id}: nuevo capital S/ ${parametros.capital.toString()}, ${parametros.numeroCuotas} cuotas.`,
+  });
+
+  return nuevoPrestamo;
 }
 
 module.exports = {
