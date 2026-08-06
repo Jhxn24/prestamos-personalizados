@@ -60,11 +60,13 @@ Crea el usuario administrador inicial — dos formas equivalentes:
   ```
   Por defecto crea `admin@prestamos.local` / `admin123`. Para cambiar esas
   credenciales, define `ADMIN_EMAIL` y `ADMIN_PASSWORD` antes de correr el seed.
-- **Desde la propia app** (recomendado en un despliegue nuevo): si la base de
-  datos no tiene ningún usuario todavía, el login del frontend web y de la
-  app móvil muestran automáticamente "Crear cuenta de administrador" en vez
-  del formulario normal. Esta vía se cierra sola en cuanto se crea el primer
-  usuario — no queda abierta como un registro público.
+- **Desde la propia app**: el login del frontend web y de la app móvil
+  siempre tienen la opción "Crear cuenta de administrador", además del login
+  normal — el registro de administradores es multi-tenant y está **siempre
+  abierto** (sin límite de cuántos puedan existir). Cada administrador que se
+  registra arranca con su propia cartera de clientes/préstamos vacía,
+  completamente aislada de la de los demás administradores que usen la misma
+  base de datos.
 
 ### 3. Levantar el servidor
 
@@ -169,13 +171,22 @@ proceso con EAS Build).
 
 ### 3. Que otra persona tenga su propio negocio
 
-No hay que tocar código: cada quien repite los pasos de arriba con **su
-propio proyecto de Railway y su propia base de datos** (sea con su propia
-cuenta, o un segundo proyecto en la misma cuenta — lo importante es que la
-base de datos sea distinta). Al abrir su app apuntando a su propia URL, crea
-su propia cuenta de administrador desde cero y ve únicamente sus propios
-clientes y préstamos — son dos sistemas completamente independientes, sin
-ningún dato compartido entre ambos.
+Hay dos formas de que varias personas usen el sistema sin mezclar sus datos,
+según cuánto aislamiento necesiten:
+
+- **Multi-tenant, un solo despliegue (recomendado)**: el sistema ya soporta
+  varios administradores en la misma base de datos, cada uno con su propia
+  cartera de clientes/préstamos/pagos, invisible para los demás (ver "Desde
+  la propia app" arriba). No hay que desplegar nada nuevo: cada persona solo
+  necesita la URL del mismo backend y crea su propia cuenta de administrador.
+  Es la opción más simple cuando todos pueden compartir el mismo servidor.
+- **Un despliegue por negocio**: cada quien repite los pasos de arriba con
+  **su propio proyecto de Railway y su propia base de datos** (sea con su
+  propia cuenta, o un segundo proyecto en la misma cuenta — lo importante es
+  que la base de datos sea distinta). Son dos sistemas completamente
+  independientes, sin ningún dato ni infraestructura compartida entre ambos
+  — útil si además de aislar los datos se quiere aislar el hosting en sí
+  (costos, disponibilidad, control total sobre esa instancia).
 
 ## Documentación de la API
 

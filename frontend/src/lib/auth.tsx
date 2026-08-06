@@ -17,7 +17,7 @@ interface AuthContextValue {
   /** true mientras se lee la sesión guardada en localStorage al montar. */
   cargando: boolean;
   login: (email: string, password: string) => Promise<void>;
-  /** Bootstrap: solo funciona una vez, mientras no exista ningún usuario todavía. */
+  /** Multi-tenant: registro siempre abierto, crea un administrador con cartera propia. */
   registrarAdmin: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }

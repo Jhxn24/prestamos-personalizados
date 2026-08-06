@@ -52,30 +52,6 @@ function registrarPushToken(usuarioId, token) {
   });
 }
 
-/** Crea la misma notificación para todos los administradores activos (RF-28). */
-async function crearParaAdministradores({ tipo, titulo, mensaje, prestamoId, cuotaId, pagoId }) {
-  const administradores = await prisma.usuario.findMany({
-    where: { rol: 'ADMINISTRADOR', activo: true },
-    select: { id: true },
-  });
-
-  if (administradores.length === 0) return [];
-
-  await prisma.notificacion.createMany({
-    data: administradores.map((admin) => ({
-      usuarioId: admin.id,
-      tipo,
-      titulo,
-      mensaje,
-      prestamoId: prestamoId ?? null,
-      cuotaId: cuotaId ?? null,
-      pagoId: pagoId ?? null,
-    })),
-  });
-
-  return administradores;
-}
-
 function listar(usuarioId, { soloNoLeidas } = {}) {
   return prisma.notificacion.findMany({
     where: { usuarioId, leida: soloNoLeidas ? false : undefined },
@@ -172,7 +148,7 @@ async function generarRecordatoriosVencimiento(fechaReferencia = new Date()) {
 
 /**
  * RF-28: resumen diario para cada administrador con cobros del día, cobros de
- * la semana y clientes morosos.
+ * la semana y clientes morosos — de SU PROPIA cartera únicamente (multi-tenant).
  *
  * A lo sumo un resumen por administrador por día (idempotente igual que los
  * recordatorios de vencimiento).
@@ -182,42 +158,13 @@ async function generarResumenAdmin(fechaReferencia = new Date()) {
   const finHoy = agregarDias(hoy, 1);
   const finSemana = agregarDias(hoy, 7);
 
-  const [cuotasHoy, cuotasSemana, prestamosActivos, administradores] = await Promise.all([
-    prisma.cuota.findMany({
-      where: {
-        estado: { in: ['PENDIENTE', 'PARCIAL'] },
-        fechaVencimiento: { gte: hoy, lt: finHoy },
-        prestamo: { estado: 'ACTIVO' },
-      },
-      select: { total: true, montoPagado: true },
-    }),
-    prisma.cuota.findMany({
-      where: {
-        estado: { in: ['PENDIENTE', 'PARCIAL'] },
-        fechaVencimiento: { gte: hoy, lt: finSemana },
-        prestamo: { estado: 'ACTIVO' },
-      },
-      select: { total: true, montoPagado: true },
-    }),
-    prisma.prestamo.findMany({
-      where: { estado: 'ACTIVO' },
-      select: { clienteId: true, cuotas: { where: { estado: 'VENCIDA' }, select: { id: true } } },
-    }),
-    prisma.usuario.findMany({ where: { rol: 'ADMINISTRADOR', activo: true }, select: { id: true } }),
-  ]);
+  const administradores = await prisma.usuario.findMany({
+    where: { rol: 'ADMINISTRADOR', activo: true },
+    select: { id: true },
+  });
 
   const sumarPendiente = (cuotas) =>
     cuotas.reduce((total, cuota) => total.plus(dec(cuota.total).minus(dec(cuota.montoPagado))), new Decimal(0));
-
-  const cobrosHoy = sumarPendiente(cuotasHoy).toFixed(2);
-  const cobrosSemana = sumarPendiente(cuotasSemana).toFixed(2);
-  const clientesMorosos = new Set(
-    prestamosActivos.filter((p) => p.cuotas.length > 0).map((p) => p.clienteId)
-  ).size;
-
-  const mensaje =
-    `Cobros de hoy: S/ ${cobrosHoy}. Cobros de la semana: S/ ${cobrosSemana}. ` +
-    `Clientes morosos: ${clientesMorosos}.`;
 
   let creadas = 0;
   for (const admin of administradores) {
@@ -226,6 +173,39 @@ async function generarResumenAdmin(fechaReferencia = new Date()) {
       select: { id: true },
     });
     if (yaNotificado) continue;
+
+    const [cuotasHoy, cuotasSemana, prestamosActivos] = await Promise.all([
+      prisma.cuota.findMany({
+        where: {
+          estado: { in: ['PENDIENTE', 'PARCIAL'] },
+          fechaVencimiento: { gte: hoy, lt: finHoy },
+          prestamo: { estado: 'ACTIVO', cliente: { administradorId: admin.id } },
+        },
+        select: { total: true, montoPagado: true },
+      }),
+      prisma.cuota.findMany({
+        where: {
+          estado: { in: ['PENDIENTE', 'PARCIAL'] },
+          fechaVencimiento: { gte: hoy, lt: finSemana },
+          prestamo: { estado: 'ACTIVO', cliente: { administradorId: admin.id } },
+        },
+        select: { total: true, montoPagado: true },
+      }),
+      prisma.prestamo.findMany({
+        where: { estado: 'ACTIVO', cliente: { administradorId: admin.id } },
+        select: { clienteId: true, cuotas: { where: { estado: 'VENCIDA' }, select: { id: true } } },
+      }),
+    ]);
+
+    const cobrosHoy = sumarPendiente(cuotasHoy).toFixed(2);
+    const cobrosSemana = sumarPendiente(cuotasSemana).toFixed(2);
+    const clientesMorosos = new Set(
+      prestamosActivos.filter((p) => p.cuotas.length > 0).map((p) => p.clienteId)
+    ).size;
+
+    const mensaje =
+      `Cobros de hoy: S/ ${cobrosHoy}. Cobros de la semana: S/ ${cobrosSemana}. ` +
+      `Clientes morosos: ${clientesMorosos}.`;
 
     await crear({
       usuarioId: admin.id,
@@ -241,7 +221,6 @@ async function generarResumenAdmin(fechaReferencia = new Date()) {
 
 module.exports = {
   crear,
-  crearParaAdministradores,
   registrarPushToken,
   listar,
   contarNoLeidas,

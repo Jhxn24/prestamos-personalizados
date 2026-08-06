@@ -1,26 +1,12 @@
-const prisma = require('../../config/prisma');
 const prestamosService = require('./prestamos.service');
 const { refrescarMora } = require('../mora/mora.service');
 const { prestamoDTO, cuotaDTO } = require('./prestamos.dto');
-
-/**
- * RNF-05: un cliente solo puede ver sus propios préstamos. Resuelve el
- * clienteId a partir del usuario autenticado; para el administrador devuelve
- * null (sin restricción).
- */
-async function clienteIdDelUsuario(usuario) {
-  if (usuario.rol === 'ADMINISTRADOR') {
-    return null;
-  }
-
-  const cliente = await prisma.cliente.findUnique({ where: { usuarioId: usuario.id } });
-  return cliente?.id ?? 'sin-cliente-asociado';
-}
+const { resolverAlcance } = require('../../lib/alcance');
 
 async function listar(req, res, next) {
   try {
-    const clienteId = await clienteIdDelUsuario(req.usuario);
-    const prestamos = await prestamosService.listarPrestamos(clienteId ? { clienteId } : {});
+    const alcance = await resolverAlcance(req.usuario);
+    const prestamos = await prestamosService.listarPrestamos(alcance);
     res.json(prestamos.map(prestamoDTO));
   } catch (error) {
     next(error);
@@ -29,14 +15,10 @@ async function listar(req, res, next) {
 
 async function obtener(req, res, next) {
   try {
-    const prestamo = await prestamosService.obtenerPrestamoPorId(req.params.id);
+    const alcance = await resolverAlcance(req.usuario);
+    const prestamo = await prestamosService.obtenerPrestamoPorId(req.params.id, alcance);
     if (!prestamo) {
       return res.status(404).json({ error: 'Préstamo no encontrado' });
-    }
-
-    const clienteId = await clienteIdDelUsuario(req.usuario);
-    if (clienteId && prestamo.clienteId !== clienteId) {
-      return res.status(403).json({ error: 'No tienes acceso a este préstamo' });
     }
 
     res.json(prestamoDTO(prestamo));
@@ -48,14 +30,10 @@ async function obtener(req, res, next) {
 // RF-20: cliente y administrador ven la versión vigente del cronograma.
 async function cronograma(req, res, next) {
   try {
-    const prestamo = await prestamosService.obtenerPrestamoPorId(req.params.id);
+    const alcance = await resolverAlcance(req.usuario);
+    const prestamo = await prestamosService.obtenerPrestamoPorId(req.params.id, alcance);
     if (!prestamo) {
       return res.status(404).json({ error: 'Préstamo no encontrado' });
-    }
-
-    const clienteId = await clienteIdDelUsuario(req.usuario);
-    if (clienteId && prestamo.clienteId !== clienteId) {
-      return res.status(403).json({ error: 'No tienes acceso a este préstamo' });
     }
 
     res.json(prestamo.cuotas.map(cuotaDTO));

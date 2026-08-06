@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,32 +9,23 @@ import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { verificarSetupRequerido } from '@/lib/auth-api';
 
 export default function LoginScreen() {
   const { login, registrarAdmin } = useAuth();
 
-  // null mientras se resuelve contra el backend: evita parpadear entre los dos formularios.
-  const [setupRequerido, setSetupRequerido] = useState<boolean | null>(null);
+  const [modo, setModo] = useState<'login' | 'registro'>('login');
+  const esRegistro = modo === 'registro';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmarPassword, setConfirmarPassword] = useState('');
   const [enviando, setEnviando] = useState(false);
 
-  useEffect(() => {
-    let activo = true;
-    verificarSetupRequerido()
-      .then(({ requerido }) => {
-        if (activo) setSetupRequerido(requerido);
-      })
-      .catch(() => {
-        if (activo) setSetupRequerido(false);
-      });
-    return () => {
-      activo = false;
-    };
-  }, []);
+  function cambiarModo(siguiente: 'login' | 'registro') {
+    setModo(siguiente);
+    setPassword('');
+    setConfirmarPassword('');
+  }
 
   async function handleLogin() {
     if (!email || !password) {
@@ -51,7 +42,7 @@ export default function LoginScreen() {
     }
   }
 
-  async function handleSetup() {
+  async function handleRegistro() {
     if (!email || !password) {
       Alert.alert('Faltan datos', 'Ingresa un email y una contraseña.');
       return;
@@ -74,10 +65,6 @@ export default function LoginScreen() {
     }
   }
 
-  if (setupRequerido === null) {
-    return <ThemedView style={{ flex: 1 }} />;
-  }
-
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <KeyboardAvoidingView
@@ -88,8 +75,8 @@ export default function LoginScreen() {
             Sistema de Préstamos
           </ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.subtitle}>
-            {setupRequerido
-              ? 'Primera vez que se usa el sistema: crea la cuenta del administrador.'
+            {esRegistro
+              ? 'Cada administrador tiene su propia cartera de clientes y préstamos.'
               : 'Inicia sesión para ver tu préstamo o gestionar el negocio.'}
           </ThemedText>
 
@@ -109,7 +96,7 @@ export default function LoginScreen() {
               secureTextEntry
               autoCapitalize="none"
             />
-            {setupRequerido && (
+            {esRegistro && (
               <TextField
                 label="Confirmar contraseña"
                 value={confirmarPassword}
@@ -119,9 +106,14 @@ export default function LoginScreen() {
               />
             )}
             <Button
-              title={setupRequerido ? 'Crear cuenta' : 'Ingresar'}
-              onPress={setupRequerido ? handleSetup : handleLogin}
+              title={esRegistro ? 'Crear cuenta' : 'Ingresar'}
+              onPress={esRegistro ? handleRegistro : handleLogin}
               loading={enviando}
+            />
+            <Button
+              title={esRegistro ? 'Ya tengo una cuenta, iniciar sesión' : 'Crear una cuenta de administrador'}
+              variant="ghost"
+              onPress={() => cambiarModo(esRegistro ? 'login' : 'registro')}
             />
           </ThemedView>
         </ThemedView>

@@ -31,6 +31,7 @@ test.before(async () => {
       nombre: 'Test',
       apellido: 'Abono',
       documento: SUFIJO,
+      administrador: { connect: { id: admin.id } },
       usuario: { create: { email: `cliente-${SUFIJO}@test.local`, password: 'x', rol: 'CLIENTE' } },
     },
     include: { usuario: true },
@@ -60,16 +61,19 @@ test.after(async () => {
 });
 
 function crearPrestamo(modalidad = 'INTERES_SOBRE_SALDO') {
-  return prestamosService.crearPrestamo({
-    clienteId: cliente.id,
-    capital: 1000,
-    tasaInteres: 5,
-    tipoInteres: 'MENSUAL',
-    frecuenciaPago: 'MENSUAL',
-    numeroCuotas: 4,
-    modalidad,
-    fechaDesembolso: new Date(),
-  });
+  return prestamosService.crearPrestamo(
+    {
+      clienteId: cliente.id,
+      capital: 1000,
+      tasaInteres: 5,
+      tipoInteres: 'MENSUAL',
+      frecuenciaPago: 'MENSUAL',
+      numeroCuotas: 4,
+      modalidad,
+      fechaDesembolso: new Date(),
+    },
+    admin.id
+  );
 }
 
 const cuotasDe = (prestamoId) =>

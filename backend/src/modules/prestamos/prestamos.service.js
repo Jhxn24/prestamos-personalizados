@@ -27,6 +27,18 @@ function parametrosDelMotor(datos) {
   };
 }
 
+/**
+ * Traduce el alcance del usuario (RNF-05 multi-tenant) al filtro de Prisma
+ * sobre Prestamo: un cliente ve solo su propio préstamo (`clienteId` es un
+ * campo directo); un administrador ve toda su cartera vía la relación con
+ * Cliente.
+ */
+function filtroAlcance({ administradorId, clienteId } = {}) {
+  if (clienteId) return { clienteId };
+  if (administradorId) return { cliente: { administradorId } };
+  return undefined;
+}
+
 function cuotasParaPersistir(cuotas) {
   return cuotas.map((cuota) => ({
     numero: cuota.numero,
@@ -62,7 +74,9 @@ function simular(datos) {
  * Registra un préstamo y su cronograma inicial (RF-05, RF-06, RF-07, RF-18).
  */
 async function crearPrestamo(datos, usuarioId) {
-  const cliente = await prisma.cliente.findUnique({ where: { id: datos.clienteId } });
+  const cliente = await prisma.cliente.findFirst({
+    where: { id: datos.clienteId, administradorId: usuarioId },
+  });
   if (!cliente) {
     throw new ErrorMotorCalculo('El cliente indicado no existe');
   }
@@ -105,21 +119,21 @@ async function crearPrestamo(datos, usuarioId) {
   return prestamo;
 }
 
-function listarPrestamos({ clienteId } = {}) {
+function listarPrestamos(alcance = {}) {
   return prisma.prestamo.findMany({
-    where: clienteId ? { clienteId } : undefined,
+    where: filtroAlcance(alcance),
     include: INCLUDE_CRONOGRAMA,
     orderBy: { createdAt: 'desc' },
   });
 }
 
-function obtenerPrestamoPorId(id) {
-  return prisma.prestamo.findUnique({ where: { id }, include: INCLUDE_CRONOGRAMA });
+function obtenerPrestamoPorId(id, alcance = {}) {
+  return prisma.prestamo.findFirst({ where: { id, ...filtroAlcance(alcance) }, include: INCLUDE_CRONOGRAMA });
 }
 
-async function obtenerCronograma(id) {
-  const prestamo = await prisma.prestamo.findUnique({
-    where: { id },
+async function obtenerCronograma(id, alcance = {}) {
+  const prestamo = await prisma.prestamo.findFirst({
+    where: { id, ...filtroAlcance(alcance) },
     include: { cuotas: { orderBy: { numero: 'asc' } } },
   });
   return prestamo?.cuotas ?? null;
@@ -133,7 +147,10 @@ async function obtenerCronograma(id) {
  * préstamo sin cronograma es un estado inválido para el negocio.
  */
 async function recalcularPrestamo(id, ajustes, usuarioId) {
-  const prestamo = await prisma.prestamo.findUnique({ where: { id }, include: { cuotas: true } });
+  const prestamo = await prisma.prestamo.findFirst({
+    where: { id, cliente: { administradorId: usuarioId } },
+    include: { cuotas: true },
+  });
   if (!prestamo) {
     return null;
   }
@@ -198,7 +215,9 @@ async function recalcularPrestamo(id, ajustes, usuarioId) {
  * capital es el saldo pendiente, con las condiciones que defina el administrador.
  */
 async function refinanciarPrestamo(id, condiciones, usuarioId) {
-  const original = await prisma.prestamo.findUnique({ where: { id } });
+  const original = await prisma.prestamo.findFirst({
+    where: { id, cliente: { administradorId: usuarioId } },
+  });
   if (!original) {
     return null;
   }

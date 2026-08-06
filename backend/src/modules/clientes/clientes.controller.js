@@ -3,7 +3,7 @@ const { clienteDTO } = require('./clientes.dto');
 
 async function listar(req, res, next) {
   try {
-    const clientes = await clientesService.listarClientes();
+    const clientes = await clientesService.listarClientes(req.usuario.id);
     res.json(clientes.map(clienteDTO));
   } catch (error) {
     next(error);
@@ -12,7 +12,7 @@ async function listar(req, res, next) {
 
 async function obtener(req, res, next) {
   try {
-    const cliente = await clientesService.obtenerClientePorId(req.params.id);
+    const cliente = await clientesService.obtenerClientePorId(req.params.id, req.usuario.id);
     if (!cliente) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
@@ -68,8 +68,11 @@ async function generarAcceso(req, res, next) {
 
 async function actualizar(req, res, next) {
   try {
-    const cliente = await clientesService.actualizarCliente(req.params.id, req.body, req.usuario.id);
-    res.json(clienteDTO(cliente));
+    const resultado = await clientesService.actualizarCliente(req.params.id, req.body, req.usuario.id);
+    if (resultado.error === 'CLIENTE_NO_ENCONTRADO') {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+    res.json(clienteDTO(resultado.cliente));
   } catch (error) {
     next(error);
   }
@@ -77,8 +80,11 @@ async function actualizar(req, res, next) {
 
 async function desactivar(req, res, next) {
   try {
-    const cliente = await clientesService.desactivarCliente(req.params.id, req.usuario.id);
-    res.json(clienteDTO(cliente));
+    const resultado = await clientesService.desactivarCliente(req.params.id, req.usuario.id);
+    if (resultado.error === 'CLIENTE_NO_ENCONTRADO') {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+    res.json(clienteDTO(resultado.cliente));
   } catch (error) {
     next(error);
   }

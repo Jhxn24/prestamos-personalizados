@@ -22,6 +22,13 @@ const INCLUDE_PAGO = {
 
 const dec = (valor) => new Decimal(valor.toString());
 
+/** Mismo criterio de alcance que `prestamos.service.js`, pero vía la relación Pago -> Prestamo. */
+function filtroAlcance({ administradorId, clienteId } = {}) {
+  if (clienteId) return { prestamo: { clienteId } };
+  if (administradorId) return { prestamo: { cliente: { administradorId } } };
+  return undefined;
+}
+
 /** RF-27: avisa al cliente dueño del préstamo el resultado de su pago. */
 async function notificarCliente(pagoId, { tipo, titulo, mensaje }) {
   const pago = await prisma.pago.findUnique({
@@ -67,8 +74,8 @@ async function registrarPago(
   },
   usuarioId
 ) {
-  const cuota = await prisma.cuota.findUnique({
-    where: { id: cuotaId },
+  const cuota = await prisma.cuota.findFirst({
+    where: { id: cuotaId, prestamo: { cliente: { administradorId: usuarioId } } },
     include: { prestamo: { include: { cliente: true } } },
   });
 
@@ -140,7 +147,10 @@ async function registrarPago(
  */
 async function anularPago(pagoId, usuarioId, motivo) {
   const actualizado = await prisma.$transaction(async (tx) => {
-    const pago = await tx.pago.findUnique({ where: { id: pagoId }, include: { snapshot: true } });
+    const pago = await tx.pago.findFirst({
+      where: { id: pagoId, prestamo: { cliente: { administradorId: usuarioId } } },
+      include: { snapshot: true },
+    });
 
     if (!pago) {
       return null;
@@ -571,20 +581,20 @@ async function recalcularCronogramaFuturo(
   return { cuotasEliminadas: sobrantes.length, cuotasModificadas };
 }
 
-function listarPagos({ clienteId, estado, prestamoId } = {}) {
+function listarPagos({ clienteId, administradorId, estado, prestamoId } = {}) {
   return prisma.pago.findMany({
     where: {
       estado: estado || undefined,
       prestamoId: prestamoId || undefined,
-      prestamo: clienteId ? { clienteId } : undefined,
+      ...filtroAlcance({ clienteId, administradorId }),
     },
     include: INCLUDE_PAGO,
     orderBy: { createdAt: 'desc' },
   });
 }
 
-function obtenerPagoPorId(id) {
-  return prisma.pago.findUnique({ where: { id }, include: INCLUDE_PAGO });
+function obtenerPagoPorId(id, alcance = {}) {
+  return prisma.pago.findFirst({ where: { id, ...filtroAlcance(alcance) }, include: INCLUDE_PAGO });
 }
 
 module.exports = {

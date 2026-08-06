@@ -1,6 +1,6 @@
-const prisma = require('../../config/prisma');
 const pagosService = require('./pagos.service');
 const { pagoDTO } = require('./pagos.dto');
+const { resolverAlcance } = require('../../lib/alcance');
 
 const ERRORES_HTTP = {
   CUOTA_NO_ENCONTRADA: [404, 'Cuota no encontrada'],
@@ -11,15 +11,6 @@ const ERRORES_HTTP = {
 function responderError(res, codigo) {
   const [estado, mensaje] = ERRORES_HTTP[codigo];
   return res.status(estado).json({ error: mensaje });
-}
-
-// RNF-05: el cliente solo ve lo suyo; el administrador no tiene restricción.
-async function clienteIdDelUsuario(usuario) {
-  if (usuario.rol === 'ADMINISTRADOR') {
-    return null;
-  }
-  const cliente = await prisma.cliente.findUnique({ where: { usuarioId: usuario.id } });
-  return cliente?.id ?? 'sin-cliente-asociado';
 }
 
 // RF-25: el administrador marca un pago como realizado; se aplica de inmediato.
@@ -43,9 +34,9 @@ async function registrar(req, res, next) {
 
 async function listar(req, res, next) {
   try {
-    const clienteId = await clienteIdDelUsuario(req.usuario);
+    const alcance = await resolverAlcance(req.usuario);
     const pagos = await pagosService.listarPagos({
-      clienteId: clienteId ?? undefined,
+      ...alcance,
       estado: req.query.estado,
       prestamoId: req.query.prestamoId,
     });
@@ -57,14 +48,10 @@ async function listar(req, res, next) {
 
 async function obtener(req, res, next) {
   try {
-    const pago = await pagosService.obtenerPagoPorId(req.params.id);
+    const alcance = await resolverAlcance(req.usuario);
+    const pago = await pagosService.obtenerPagoPorId(req.params.id, alcance);
     if (!pago) {
       return responderError(res, 'PAGO_NO_ENCONTRADO');
-    }
-
-    const clienteId = await clienteIdDelUsuario(req.usuario);
-    if (clienteId && pago.prestamo.clienteId !== clienteId) {
-      return responderError(res, 'SIN_ACCESO');
     }
 
     res.json(pagoDTO(pago));

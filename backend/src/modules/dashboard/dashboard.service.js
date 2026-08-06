@@ -19,7 +19,7 @@ function sumar(items, campo) {
 /**
  * Dashboard del administrador (RF-29): visión general del negocio.
  */
-async function resumenAdministrador() {
+async function resumenAdministrador(administradorId) {
   const hoy = inicioDelDia();
   const en7Dias = new Date(hoy);
   en7Dias.setDate(en7Dias.getDate() + 7);
@@ -29,7 +29,7 @@ async function resumenAdministrador() {
 
   const [prestamos, clientesActivos, pagosConfirmados, cuotasProximas] = await Promise.all([
     prisma.prestamo.findMany({
-      where: { estado: { not: 'CANCELADO' } },
+      where: { estado: { not: 'CANCELADO' }, cliente: { administradorId } },
       select: {
         id: true,
         estado: true,
@@ -39,16 +39,16 @@ async function resumenAdministrador() {
         cuotas: { where: CUOTAS_ABIERTAS, select: { estado: true } },
       },
     }),
-    prisma.cliente.count({ where: { activo: true } }),
+    prisma.cliente.count({ where: { activo: true, administradorId } }),
     prisma.pago.findMany({
-      where: { estado: 'CONFIRMADO' },
+      where: { estado: 'CONFIRMADO', prestamo: { cliente: { administradorId } } },
       select: { monto: true, interesAplicado: true, fechaConfirmacion: true },
     }),
     prisma.cuota.findMany({
       where: {
         estado: { in: ['PENDIENTE', 'PARCIAL'] },
         fechaVencimiento: { gte: hoy, lte: en7Dias },
-        prestamo: { estado: 'ACTIVO' },
+        prestamo: { estado: 'ACTIVO', cliente: { administradorId } },
       },
       select: {
         id: true,

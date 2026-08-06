@@ -8,16 +8,17 @@ const usuarioPublico = {
   select: { id: true, email: true, rol: true, activo: true },
 };
 
-function listarClientes() {
+function listarClientes(administradorId) {
   return prisma.cliente.findMany({
+    where: { administradorId },
     include: { usuario: usuarioPublico },
     orderBy: { createdAt: 'desc' },
   });
 }
 
-function obtenerClientePorId(id) {
-  return prisma.cliente.findUnique({
-    where: { id },
+function obtenerClientePorId(id, administradorId) {
+  return prisma.cliente.findFirst({
+    where: { id, administradorId },
     include: { usuario: usuarioPublico },
   });
 }
@@ -37,6 +38,12 @@ async function crearCliente({ nombre, apellido, documento, telefono, direccion, 
       documento,
       telefono,
       direccion,
+      // Prisma exige el modo "unchecked" (administradorId escalar) o el modo
+      // "checked" (connect) de forma consistente en todo el `data`: como
+      // `usuario` puede venir como escritura anidada (`create`), el vínculo al
+      // administrador también debe expresarse como relación (`connect`), no
+      // como el escalar `administradorId` directo.
+      administrador: { connect: { id: usuarioId } },
       ...datosUsuario,
     },
     include: { usuario: usuarioPublico },
@@ -55,7 +62,7 @@ async function crearCliente({ nombre, apellido, documento, telefono, direccion, 
 
 /** Agrega una cuenta de acceso a un cliente que no tenía (RF-04 opcional). */
 async function generarAccesoCliente(id, { email, password }, usuarioId) {
-  const cliente = await prisma.cliente.findUnique({ where: { id } });
+  const cliente = await prisma.cliente.findFirst({ where: { id, administradorId: usuarioId } });
   if (!cliente) {
     return { error: 'CLIENTE_NO_ENCONTRADO' };
   }
@@ -93,7 +100,10 @@ function describirCambios(anterior, cambios) {
 
 async function actualizarCliente(id, datos, usuarioId) {
   const { nombre, apellido, documento, telefono, direccion } = datos;
-  const anterior = await prisma.cliente.findUnique({ where: { id } });
+  const anterior = await prisma.cliente.findFirst({ where: { id, administradorId: usuarioId } });
+  if (!anterior) {
+    return { error: 'CLIENTE_NO_ENCONTRADO' };
+  }
 
   const actualizado = await prisma.cliente.update({
     where: { id },
@@ -101,21 +111,25 @@ async function actualizarCliente(id, datos, usuarioId) {
     include: { usuario: usuarioPublico },
   });
 
-  if (anterior) {
-    await auditoriaService.registrar({
-      usuarioId,
-      entidad: 'CLIENTE',
-      entidadId: id,
-      accion: 'ACTUALIZAR',
-      detalle: describirCambios(anterior, { nombre, apellido, documento, telefono, direccion }),
-    });
-  }
+  await auditoriaService.registrar({
+    usuarioId,
+    entidad: 'CLIENTE',
+    entidadId: id,
+    accion: 'ACTUALIZAR',
+    detalle: describirCambios(anterior, { nombre, apellido, documento, telefono, direccion }),
+  });
 
-  return actualizado;
+  return { cliente: actualizado };
 }
 
 async function desactivarCliente(id, usuarioId) {
-  const existente = await prisma.cliente.findUnique({ where: { id }, select: { usuarioId: true } });
+  const existente = await prisma.cliente.findFirst({
+    where: { id, administradorId: usuarioId },
+    select: { usuarioId: true },
+  });
+  if (!existente) {
+    return { error: 'CLIENTE_NO_ENCONTRADO' };
+  }
 
   const cliente = await prisma.cliente.update({
     where: { id },
@@ -135,7 +149,7 @@ async function desactivarCliente(id, usuarioId) {
     detalle: `Cliente ${cliente.nombre} ${cliente.apellido} desactivado.`,
   });
 
-  return cliente;
+  return { cliente };
 }
 
 module.exports = {

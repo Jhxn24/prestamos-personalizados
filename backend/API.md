@@ -10,6 +10,13 @@ El token se obtiene en el login y determina el rol (`ADMINISTRADOR` o `CLIENTE`)
 cliente solo puede ver información asociada a su propio `clienteId` (RNF-05); si
 intenta acceder a datos de otro préstamo recibe `403`.
 
+**Multi-tenant**: puede haber varios administradores en la misma base de datos,
+cada uno con su propia cartera de clientes/préstamos/pagos, completamente
+aislada de la de los demás. Un administrador solo ve y puede operar sobre lo
+que él mismo creó; intentar acceder por id a un cliente, préstamo o pago de
+otro administrador responde `404` (no se distingue de "no existe", para no
+filtrar su existencia).
+
 Todos los montos de dinero se devuelven como **string con 2 decimales** (ej.
 `"367.21"`), nunca como `number`, para no perder precisión en el frontend. Las
 fechas se devuelven en ISO 8601 (UTC).
@@ -18,17 +25,12 @@ fechas se devuelven en ISO 8601 (UTC).
 
 ## Auth
 
-### `GET /api/auth/setup-requerido`
-
-Sin autenticación. Responde `{ "requerido": true }` mientras no exista **ningún**
-usuario en la base de datos — el frontend lo usa para mostrar "Crear cuenta de
-administrador" en vez del login la primera vez que alguien abre la app.
-
 ### `POST /api/auth/registrar-admin`
 
-Bootstrap del primer administrador. Solo funciona mientras `setup-requerido`
-sea `true`; en cuanto existe cualquier usuario (admin o cliente) esta vía
-responde `409` para siempre — no es un registro público.
+Sin autenticación. Registro de administrador **siempre abierto** (multi-tenant):
+cualquiera con la URL puede crear una cuenta de administrador, sin límite de
+cuántas puedan existir. Cada administrador arranca con su propia cartera
+vacía, aislada de la de los demás — no hay un paso de "bootstrap" separado.
 
 ```json
 // request
@@ -44,7 +46,7 @@ responde `409` para siempre — no es un registro público.
 ```
 
 `400` si el email es inválido o la contraseña tiene menos de 6 caracteres.
-`409` si ya existe un usuario (`{ "error": "Ya existe un administrador registrado; pide tus credenciales." }`).
+`409` si ya existe una cuenta con ese email (`{ "error": "Ya existe una cuenta con ese email." }`).
 
 ### `POST /api/auth/login`
 
@@ -523,10 +525,12 @@ recuperar el día si el proceso estuvo caído a esa hora; el body admite
 
 La operación más destructiva del sistema: borra **permanentemente** todos los
 `Cliente`, `Prestamo` (con sus `Cuota`, `Pago`, `Recibo` y `PagoSnapshot` en
-cascada) y las cuentas de acceso de cliente (`Usuario` con `rol: CLIENTE`).
-Irreversible, sin papelera. La bitácora de auditoría (`RegistroAuditoria`) no
-se toca — incluso queda un registro de esta misma acción — y el propio
-administrador que la ejecuta sobrevive.
+cascada) y las cuentas de acceso de cliente (`Usuario` con `rol: CLIENTE`) **de
+la cartera del administrador que la ejecuta** — multi-tenant: nunca toca los
+clientes/préstamos de otro administrador. Irreversible, sin papelera. La
+bitácora de auditoría (`RegistroAuditoria`) no se toca — incluso queda un
+registro de esta misma acción — y el propio administrador que la ejecuta
+sobrevive.
 
 Exige dos confirmaciones en el body, no solo un click en la UI:
 
@@ -562,19 +566,21 @@ paso manual — cada vez que ocurre una de estas acciones:
 - **Pago**: registro directo del administrador (RF-25, se guarda como
   `CONFIRMAR` porque se aplica de inmediato) y anulación de un pago
   (`ANULAR`).
-- **Sistema**: borrado masivo de todos los clientes/préstamos/pagos
-  (`PURGAR`, entidad `SISTEMA`, `entidadId: "GLOBAL"`) — ver arriba.
+- **Sistema**: borrado masivo de la cartera del administrador (`PURGAR`,
+  entidad `SISTEMA`, `entidadId` = id del propio administrador) — ver arriba.
 
 ### `GET /api/auditoria`
 
-Los últimos 200 registros, más nuevos primero. Todos los filtros son opcionales
-y combinables por query string:
+Los últimos 200 registros del propio administrador, más nuevos primero
+(multi-tenant: `usuarioId` siempre se fija al administrador autenticado, sin
+importar lo que venga en la query string — cada admin ve solo su propia
+bitácora, que coincide con las acciones sobre su propia cartera). Los demás
+filtros son opcionales y combinables por query string:
 
 | Parámetro   | Valores                              |
 | ----------- | ------------------------------------- |
 | `entidad`   | `CLIENTE`, `PRESTAMO`, `PAGO`, `SISTEMA` |
 | `entidadId` | id de la entidad afectada             |
-| `usuarioId` | quién hizo el cambio                  |
 | `desde`     | fecha ISO (inclusive)                 |
 | `hasta`     | fecha ISO (inclusive)                 |
 

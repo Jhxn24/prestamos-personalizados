@@ -29,6 +29,7 @@ test.before(async () => {
       nombre: 'Test',
       apellido: 'Notif',
       documento: SUFIJO,
+      administrador: { connect: { id: admin.id } },
       usuario: { create: { email: `cliente-${SUFIJO}@test.local`, password: 'x', rol: 'CLIENTE' } },
     },
     include: { usuario: true },
@@ -60,16 +61,19 @@ test.after(async () => {
 });
 
 function crearPrestamo() {
-  return prestamosService.crearPrestamo({
-    clienteId: cliente.id,
-    capital: 1000,
-    tasaInteres: 5,
-    tipoInteres: 'MENSUAL',
-    frecuenciaPago: 'MENSUAL',
-    numeroCuotas: 4,
-    modalidad: 'INTERES_SOBRE_SALDO',
-    fechaDesembolso: new Date(),
-  });
+  return prestamosService.crearPrestamo(
+    {
+      clienteId: cliente.id,
+      capital: 1000,
+      tasaInteres: 5,
+      tipoInteres: 'MENSUAL',
+      frecuenciaPago: 'MENSUAL',
+      numeroCuotas: 4,
+      modalidad: 'INTERES_SOBRE_SALDO',
+      fechaDesembolso: new Date(),
+    },
+    admin.id
+  );
 }
 
 const cuotasDe = (prestamoId) =>
@@ -103,20 +107,23 @@ test('anular un pago notifica al cliente con el motivo', async () => {
 
 test('un cliente sin cuenta de acceso no recibe notificaciones (no debe reventar)', async () => {
   const sinCuenta = await prisma.cliente.create({
-    data: { nombre: 'Sin', apellido: 'Cuenta', documento: `${SUFIJO}-sin-cuenta` },
+    data: { nombre: 'Sin', apellido: 'Cuenta', documento: `${SUFIJO}-sin-cuenta`, administradorId: admin.id },
   });
 
   try {
-    const prestamoSinCuenta = await prestamosService.crearPrestamo({
-      clienteId: sinCuenta.id,
-      capital: 500,
-      tasaInteres: 5,
-      tipoInteres: 'MENSUAL',
-      frecuenciaPago: 'MENSUAL',
-      numeroCuotas: 2,
-      modalidad: 'INTERES_FIJO',
-      fechaDesembolso: new Date(),
-    });
+    const prestamoSinCuenta = await prestamosService.crearPrestamo(
+      {
+        clienteId: sinCuenta.id,
+        capital: 500,
+        tasaInteres: 5,
+        tipoInteres: 'MENSUAL',
+        frecuenciaPago: 'MENSUAL',
+        numeroCuotas: 2,
+        modalidad: 'INTERES_FIJO',
+        fechaDesembolso: new Date(),
+      },
+      admin.id
+    );
     const [cuota1] = await cuotasDe(prestamoSinCuenta.id);
 
     // No debe lanzar, aunque no haya a quién notificar.
@@ -161,20 +168,28 @@ test('RF-26: recordatorios de vencimiento (hoy, mañana, en una semana) y es ide
 
 test('RF-26: un cliente sin cuenta de acceso no genera recordatorios (no debe reventar)', async () => {
   const sinCuenta = await prisma.cliente.create({
-    data: { nombre: 'Sin', apellido: 'Recordatorio', documento: `${SUFIJO}-sin-recordatorio` },
+    data: {
+      nombre: 'Sin',
+      apellido: 'Recordatorio',
+      documento: `${SUFIJO}-sin-recordatorio`,
+      administradorId: admin.id,
+    },
   });
 
   try {
-    const prestamoSinCuenta = await prestamosService.crearPrestamo({
-      clienteId: sinCuenta.id,
-      capital: 500,
-      tasaInteres: 5,
-      tipoInteres: 'MENSUAL',
-      frecuenciaPago: 'MENSUAL',
-      numeroCuotas: 2,
-      modalidad: 'INTERES_FIJO',
-      fechaDesembolso: new Date(),
-    });
+    const prestamoSinCuenta = await prestamosService.crearPrestamo(
+      {
+        clienteId: sinCuenta.id,
+        capital: 500,
+        tasaInteres: 5,
+        tipoInteres: 'MENSUAL',
+        frecuenciaPago: 'MENSUAL',
+        numeroCuotas: 2,
+        modalidad: 'INTERES_FIJO',
+        fechaDesembolso: new Date(),
+      },
+      admin.id
+    );
     const [cuota1] = await cuotasDe(prestamoSinCuenta.id);
 
     const hoy = new Date();

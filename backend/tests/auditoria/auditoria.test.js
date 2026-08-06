@@ -30,6 +30,7 @@ test.before(async () => {
       nombre: 'Test',
       apellido: 'Audit',
       documento: SUFIJO,
+      administrador: { connect: { id: admin.id } },
       usuario: { create: { email: `cliente-${SUFIJO}@test.local`, password: 'x', rol: 'CLIENTE' } },
     },
     include: { usuario: true },

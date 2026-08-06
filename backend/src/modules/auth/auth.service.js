@@ -29,23 +29,12 @@ async function login(email, password) {
   return emitirToken(usuario);
 }
 
-/** true mientras no exista ningún usuario — la app debe ofrecer crear el primer administrador. */
-async function setupRequerido() {
-  const total = await prisma.usuario.count();
-  return total === 0;
-}
-
 /**
- * Bootstrap: crea el primer administrador. Solo funciona una vez — en cuanto
- * existe cualquier usuario (admin o cliente) esta vía se cierra para siempre,
- * así no queda abierta como un registro público después del setup inicial.
+ * Registro de administrador (multi-tenant): siempre abierto, sin límite de
+ * cuántos puedan existir. Cada administrador arranca con su propia cartera
+ * vacía, aislada de la de los demás.
  */
-async function registrarPrimerAdmin({ email, password }) {
-  const total = await prisma.usuario.count();
-  if (total > 0) {
-    return { error: 'SETUP_YA_REALIZADO' };
-  }
-
+async function registrarAdmin({ email, password }) {
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const usuario = await prisma.usuario.create({
     data: { email, password: passwordHash, rol: 'ADMINISTRADOR' },
@@ -71,4 +60,4 @@ async function cambiarPassword(usuarioId, { passwordActual, passwordNueva }) {
   return {};
 }
 
-module.exports = { login, setupRequerido, registrarPrimerAdmin, cambiarPassword };
+module.exports = { login, registrarAdmin, cambiarPassword };

@@ -25,6 +25,7 @@ model Usuario {
   updatedAt DateTime @updatedAt
 
   cliente   Cliente?
+  clientes  Cliente[] @relation("ClientesDeAdmin")
 
   pagosRegistrados Pago[] @relation("PagosRegistrados")
   pagosConfirmados Pago[] @relation("PagosConfirmados")
@@ -53,7 +54,7 @@ model Cliente {
   id        String   @id @default(uuid())
   nombre    String
   apellido  String
-  documento String   @unique
+  documento String
   telefono  String?
   direccion String?
   activo    Boolean  @default(true)
@@ -63,7 +64,16 @@ model Cliente {
   usuario   Usuario? @relation(fields: [usuarioId], references: [id])
   usuarioId String?  @unique
 
+  // RF-multi-tenant: cada cliente pertenece a un único administrador; sus
+  // préstamos, pagos, cuotas y notificaciones heredan ese alcance a través
+  // de esta relación (no tienen administradorId propio).
+  administrador   Usuario @relation("ClientesDeAdmin", fields: [administradorId], references: [id])
+  administradorId String
+
   prestamos Prestamo[]
+
+  @@unique([documento, administradorId])
+  @@index([administradorId])
 }
 
 enum ModalidadPrestamo {

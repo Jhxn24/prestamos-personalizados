@@ -34,36 +34,45 @@ async function purgarDatos(usuarioId, { confirmacion, password }) {
   }
 
   const resultado = await prisma.$transaction(async (tx) => {
+    const filtroCartera = { cliente: { administradorId: usuarioId } };
+
     const [clientes, prestamos, pagos] = await Promise.all([
-      tx.cliente.count(),
-      tx.prestamo.count(),
-      tx.pago.count(),
+      tx.cliente.count({ where: { administradorId: usuarioId } }),
+      tx.prestamo.count({ where: filtroCartera }),
+      tx.pago.count({ where: { prestamo: filtroCartera } }),
     ]);
+
+    // Las cuentas de acceso de cliente hay que identificarlas ANTES de borrar
+    // Cliente: una vez borrado, la relación para encontrarlas ya no existe.
+    const clientesConAcceso = await tx.cliente.findMany({
+      where: { administradorId: usuarioId, usuarioId: { not: null } },
+      select: { usuarioId: true },
+    });
 
     // Rompe primero el auto-referencia de refinanciamiento (aunque el FK ya
     // es ON DELETE SET NULL, hacerlo explícito evita cualquier ambigüedad de
     // orden al borrar toda la tabla en un solo statement.
-    await tx.prestamo.updateMany({ data: { prestamoOrigenId: null } });
+    await tx.prestamo.updateMany({ where: filtroCartera, data: { prestamoOrigenId: null } });
 
     // Cuota, Pago, Recibo y PagoSnapshot cuelgan de Prestamo con ON DELETE
     // CASCADE — desaparecen solos.
-    await tx.prestamo.deleteMany({});
-    await tx.cliente.deleteMany({});
+    await tx.prestamo.deleteMany({ where: filtroCartera });
+    await tx.cliente.deleteMany({ where: { administradorId: usuarioId } });
 
-    // Las cuentas de acceso de cliente (rol CLIENTE) quedan huérfanas al
-    // borrar Cliente (esa relación no tiene cascada en ese sentido); sus
-    // notificaciones sí caen en cascada al borrar el Usuario.
+    // Las cuentas de acceso de cliente quedan huérfanas al borrar Cliente (esa
+    // relación no tiene cascada en ese sentido); sus notificaciones sí caen en
+    // cascada al borrar el Usuario. Solo se borran las de ESTE administrador.
     const { count: cuentasClienteEliminadas } = await tx.usuario.deleteMany({
-      where: { rol: 'CLIENTE' },
+      where: { id: { in: clientesConAcceso.map((c) => c.usuarioId) } },
     });
 
     await tx.registroAuditoria.create({
       data: {
         usuarioId,
         entidad: 'SISTEMA',
-        entidadId: 'GLOBAL',
+        entidadId: usuarioId,
         accion: 'PURGAR',
-        detalle: `Se eliminaron todos los datos: ${clientes} clientes, ${prestamos} préstamos, ${pagos} pagos y ${cuentasClienteEliminadas} cuentas de cliente.`,
+        detalle: `Se eliminaron todos los datos de la cartera: ${clientes} clientes, ${prestamos} préstamos, ${pagos} pagos y ${cuentasClienteEliminadas} cuentas de cliente.`,
       },
     });
 

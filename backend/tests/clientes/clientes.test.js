@@ -121,6 +121,6 @@ test('desactivarCliente no revienta con un cliente sin cuenta de acceso', async 
   );
   clientesCreados.push(cliente);
 
-  const desactivado = await clientesService.desactivarCliente(cliente.id, admin.id);
+  const { cliente: desactivado } = await clientesService.desactivarCliente(cliente.id, admin.id);
   assert.equal(desactivado.activo, false);
 });

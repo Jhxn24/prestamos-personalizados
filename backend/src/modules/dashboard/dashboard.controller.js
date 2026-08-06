@@ -5,7 +5,7 @@ const dashboardService = require('./dashboard.service');
 async function resumen(req, res, next) {
   try {
     if (req.usuario.rol === 'ADMINISTRADOR') {
-      return res.json(await dashboardService.resumenAdministrador());
+      return res.json(await dashboardService.resumenAdministrador(req.usuario.id));
     }
 
     const cliente = await prisma.cliente.findUnique({ where: { usuarioId: req.usuario.id } });

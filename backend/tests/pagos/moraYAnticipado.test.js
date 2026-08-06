@@ -38,6 +38,7 @@ test.before(async () => {
       nombre: 'Test',
       apellido: 'Mora',
       documento: SUFIJO,
+      administrador: { connect: { id: admin.id } },
       usuario: { create: { email: `cliente-${SUFIJO}@test.local`, password: 'x', rol: 'CLIENTE' } },
     },
     include: { usuario: true },
@@ -68,19 +69,22 @@ test.after(async () => {
 
 /** Préstamo de 1000 en 4 cuotas mensuales al 5%, con la política de mora dada. */
 function crearPrestamo({ politicaMora = 'NINGUNA', tasaMora = 0, diasGracia = 0 } = {}) {
-  return prestamosService.crearPrestamo({
-    clienteId: cliente.id,
-    capital: 1000,
-    tasaInteres: 5,
-    tipoInteres: 'MENSUAL',
-    frecuenciaPago: 'MENSUAL',
-    numeroCuotas: 4,
-    modalidad: 'INTERES_SOBRE_SALDO',
-    fechaDesembolso: DESEMBOLSO,
-    politicaMora,
-    tasaMora,
-    diasGracia,
-  });
+  return prestamosService.crearPrestamo(
+    {
+      clienteId: cliente.id,
+      capital: 1000,
+      tasaInteres: 5,
+      tipoInteres: 'MENSUAL',
+      frecuenciaPago: 'MENSUAL',
+      numeroCuotas: 4,
+      modalidad: 'INTERES_SOBRE_SALDO',
+      fechaDesembolso: DESEMBOLSO,
+      politicaMora,
+      tasaMora,
+      diasGracia,
+    },
+    admin.id
+  );
 }
 
 const cuotasDe = (prestamoId) =>

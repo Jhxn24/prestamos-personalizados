@@ -18,16 +18,8 @@ async function login(req, res, next) {
   }
 }
 
-/** El frontend usa esto para decidir si muestra "Crear cuenta de administrador" en vez de login. */
-async function setupRequerido(req, res, next) {
-  try {
-    res.json({ requerido: await authService.setupRequerido() });
-  } catch (error) {
-    next(error);
-  }
-}
-
-// RF-04-like bootstrap: solo crea el primer administrador; se cierra en cuanto exista un usuario.
+// Multi-tenant: registro de administrador siempre abierto (cada uno arranca
+// con su propia cartera vacía).
 async function registrarAdmin(req, res, next) {
   try {
     const { email, password } = req.body;
@@ -41,13 +33,12 @@ async function registrarAdmin(req, res, next) {
       return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
     }
 
-    const { resultado, error } = await authService.registrarPrimerAdmin({ email, password });
-    if (error) {
-      return res.status(409).json({ error: 'Ya existe un administrador registrado; pide tus credenciales.' });
-    }
-
+    const { resultado } = await authService.registrarAdmin({ email, password });
     res.status(201).json(resultado);
   } catch (error) {
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'Ya existe una cuenta con ese email.' });
+    }
     next(error);
   }
 }
@@ -73,4 +64,4 @@ async function cambiarPassword(req, res, next) {
   }
 }
 
-module.exports = { login, setupRequerido, registrarAdmin, cambiarPassword };
+module.exports = { login, registrarAdmin, cambiarPassword };

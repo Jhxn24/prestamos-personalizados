@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
-import { verificarSetupRequerido } from "@/lib/auth-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,8 +19,8 @@ export default function LoginPage() {
   const { login, registrarAdmin } = useAuth();
   const router = useRouter();
 
-  // null mientras se resuelve contra el backend: evita parpadear entre los dos formularios.
-  const [setupRequerido, setSetupRequerido] = useState<boolean | null>(null);
+  const [modo, setModo] = useState<"login" | "registro">("login");
+  const esRegistro = modo === "registro";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,20 +28,12 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
-  useEffect(() => {
-    let activo = true;
-    verificarSetupRequerido()
-      .then(({ requerido }) => {
-        if (activo) setSetupRequerido(requerido);
-      })
-      .catch(() => {
-        // Si falla la verificación (ej. backend caído), se asume login normal.
-        if (activo) setSetupRequerido(false);
-      });
-    return () => {
-      activo = false;
-    };
-  }, []);
+  function cambiarModo(siguiente: "login" | "registro") {
+    setModo(siguiente);
+    setError(null);
+    setPassword("");
+    setConfirmarPassword("");
+  }
 
   async function handleSubmitLogin(event: FormEvent) {
     event.preventDefault();
@@ -58,7 +49,7 @@ export default function LoginPage() {
     }
   }
 
-  async function handleSubmitSetup(event: FormEvent) {
+  async function handleSubmitRegistro(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
@@ -82,24 +73,20 @@ export default function LoginPage() {
     }
   }
 
-  if (setupRequerido === null) {
-    return null;
-  }
-
   return (
     <div className="flex flex-1 items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>{setupRequerido ? "Crear cuenta de administrador" : "Iniciar sesión"}</CardTitle>
+          <CardTitle>{esRegistro ? "Crear cuenta de administrador" : "Iniciar sesión"}</CardTitle>
           <CardDescription>
-            {setupRequerido
-              ? "Primera vez que se usa el sistema: crea la cuenta del administrador."
+            {esRegistro
+              ? "Cada administrador tiene su propia cartera de clientes y préstamos, separada de la de los demás."
               : "Sistema de Gestión de Préstamos"}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form
-            onSubmit={setupRequerido ? handleSubmitSetup : handleSubmitLogin}
+            onSubmit={esRegistro ? handleSubmitRegistro : handleSubmitLogin}
             className="flex flex-col gap-4"
           >
             <div className="flex flex-col gap-2">
@@ -118,13 +105,13 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                autoComplete={setupRequerido ? "new-password" : "current-password"}
+                autoComplete={esRegistro ? "new-password" : "current-password"}
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
             </div>
-            {setupRequerido && (
+            {esRegistro && (
               <div className="flex flex-col gap-2">
                 <Label htmlFor="confirmarPassword">Confirmar contraseña</Label>
                 <Input
@@ -139,9 +126,16 @@ export default function LoginPage() {
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" disabled={cargando} className="mt-2">
-              {cargando ? "Guardando..." : setupRequerido ? "Crear cuenta" : "Ingresar"}
+              {cargando ? "Guardando..." : esRegistro ? "Crear cuenta" : "Ingresar"}
             </Button>
           </form>
+          <button
+            type="button"
+            onClick={() => cambiarModo(esRegistro ? "login" : "registro")}
+            className="mt-4 w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
+            {esRegistro ? "Ya tengo una cuenta, iniciar sesión" : "Crear una cuenta de administrador"}
+          </button>
         </CardContent>
       </Card>
     </div>

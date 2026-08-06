@@ -6,11 +6,7 @@ const prisma = require('../../src/config/prisma');
 const authService = require('../../src/modules/auth/auth.service');
 
 /**
- * Pruebas de integración de auth contra la base de datos real. No se prueba
- * el camino "true" de setupRequerido/registrarPrimerAdmin: eso exigiría una
- * base de datos vacía, y vaciarla sería destructivo sobre datos reales de
- * desarrollo. Se prueba en cambio que la vía se cierra en cuanto ya existe
- * un usuario (que siempre es el caso en este entorno, por el admin sembrado).
+ * Pruebas de integración de auth contra la base de datos real.
  */
 
 const SUFIJO = `test-auth-${Date.now()}`;
@@ -33,22 +29,22 @@ test.after(async () => {
   await prisma.$disconnect();
 });
 
-test('setupRequerido: es false porque ya existe al menos un usuario en este entorno', async () => {
-  assert.equal(await authService.setupRequerido(), false);
-});
-
-test('registrarPrimerAdmin: se rechaza porque ya existe al menos un usuario', async () => {
-  const { resultado, error } = await authService.registrarPrimerAdmin({
-    email: `deberia-fallar-${SUFIJO}@test.local`,
+test('registrarAdmin: crea un administrador nuevo aunque ya existan otros usuarios (multi-tenant)', async () => {
+  const { resultado } = await authService.registrarAdmin({
+    email: `nuevo-admin-${SUFIJO}@test.local`,
     password: 'algunaClave123',
   });
-  assert.equal(error, 'SETUP_YA_REALIZADO');
-  assert.equal(resultado, undefined);
+  assert.ok(resultado.token);
+  assert.equal(resultado.usuario.rol, 'ADMINISTRADOR');
 
-  const creado = await prisma.usuario.findUnique({
-    where: { email: `deberia-fallar-${SUFIJO}@test.local` },
-  });
-  assert.equal(creado, null);
+  await prisma.usuario.delete({ where: { id: resultado.usuario.id } });
+});
+
+test('registrarAdmin: rechaza un email duplicado', async () => {
+  await assert.rejects(
+    () => authService.registrarAdmin({ email: usuario.email, password: 'algunaClave123' }),
+    (error) => error.code === 'P2002'
+  );
 });
 
 test('cambiarPassword: rechaza si la contraseña actual no coincide', async () => {
