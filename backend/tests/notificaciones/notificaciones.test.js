@@ -225,6 +225,33 @@ test('RF-28: aviso puntual al admin por cliente con cobro hoy (nombre y monto) y
   assert.equal(segundaVuelta, 0);
 });
 
+test('RF-28: el aviso de cobro hoy se repite en la corrida de las 8pm si la cuota sigue sin pagar', async () => {
+  const prestamo = await crearPrestamo();
+  const [cuota1] = await cuotasDe(prestamo.id);
+
+  const hoy = new Date();
+  hoy.setUTCHours(0, 0, 0, 0);
+  await prisma.cuota.update({ where: { id: cuota1.id }, data: { fechaVencimiento: hoy } });
+
+  const creadasMañana = await notificacionesService.generarCobrosHoyPorCliente();
+  assert.equal(creadasMañana, 1);
+
+  // Simula que ya pasaron 12 horas desde el aviso de la mañana (más que la
+  // ventana de deduplicación de 6 horas), como si ahora corriera el barrido
+  // de las 8pm.
+  await prisma.notificacion.updateMany({
+    where: { tipo: 'COBRO_HOY_CLIENTE', cuotaId: cuota1.id },
+    data: { createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000) },
+  });
+
+  const creadasNoche = await notificacionesService.generarCobrosHoyPorCliente();
+  assert.equal(creadasNoche, 1);
+
+  const notifs = await notificacionesDe(admin.id);
+  const avisos = notifs.filter((n) => n.tipo === 'COBRO_HOY_CLIENTE' && n.cuotaId === cuota1.id);
+  assert.equal(avisos.length, 2);
+});
+
 test('RF-28: resumen diario del administrador y es idempotente', async () => {
   // generarResumenAdmin notifica a TODOS los administradores activos de la
   // base de datos, no solo al `admin` de esta prueba — incluye al

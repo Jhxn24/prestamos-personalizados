@@ -435,8 +435,13 @@ Se generan de dos formas:
   anularlo disparan la notificación correspondiente en el momento. Un
   cliente sin cuenta de acceso (acceso opcional) simplemente no recibe nada.
 - **Por barrido diario**, vía `node-cron` (`src/jobs/notificaciones.job.js`),
-  todos los días a las 08:00 hora del servidor. El barrido es idempotente: no
-  duplica avisos si se corre más de una vez el mismo día.
+  todos los días a las 08:00 hora de Perú (`America/Lima`, fijo sin importar
+  la zona del servidor): recordatorios de vencimiento, resumen del
+  administrador y el primer aviso de cobro por cliente. El aviso de cobro
+  por cliente se repite además a las 20:00, por si el administrador se
+  olvidó de cobrar en la mañana; una cuota ya cobrada entre medio no vuelve a
+  avisar. El barrido es idempotente: no duplica avisos si se corre más de
+  una vez dentro de la misma corrida.
 
 ### `POST /api/notificaciones/push-token`
 

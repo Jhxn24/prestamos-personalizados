@@ -219,18 +219,28 @@ async function generarResumenAdmin(fechaReferencia = new Date()) {
   return creadas;
 }
 
+// Separa las dos corridas diarias (8am/8pm) sin duplicar el aviso si el
+// proceso se reinicia entre medio: cualquier notificación más nueva que esta
+// ventana cuenta como "ya avisado", cualquiera más vieja ya no.
+const VENTANA_DEDUP_COBRO_HOY_MS = 6 * 60 * 60 * 1000;
+
 /**
  * RF-28: además del resumen agregado, un aviso puntual al administrador por
  * cada cliente que tiene una cuota venciendo hoy, con nombre y monto —
- * "Hoy <fecha> le toca pagar a <cliente> el monto de S/ <monto>."
+ * "Hoy <fecha> le toca pagar a <cliente> el monto de S/ <monto>." Se llama
+ * dos veces al día (8am y 8pm, hora de Perú) por si el administrador olvida
+ * cobrar en la mañana; una cuota que ya se pagó entre medio simplemente deja
+ * de aparecer (el filtro de estado la excluye), así que no llega un segundo
+ * aviso de algo ya cobrado.
  *
- * Una notificación por cuota (idempotente por cuota+día, igual que el resto
- * del barrido), agrupada bajo el administrador propietario de esa cartera.
+ * Una notificación por cuota y corrida, agrupada bajo el administrador
+ * propietario de esa cartera.
  */
 async function generarCobrosHoyPorCliente(fechaReferencia = new Date()) {
   const hoy = inicioDelDiaUTC(fechaReferencia);
   const finHoy = agregarDias(hoy, 1);
   const fechaTexto = formatearFechaCorta(hoy);
+  const desde = new Date(fechaReferencia.getTime() - VENTANA_DEDUP_COBRO_HOY_MS);
 
   const cuotas = await prisma.cuota.findMany({
     where: {
@@ -257,7 +267,7 @@ async function generarCobrosHoyPorCliente(fechaReferencia = new Date()) {
     const adminId = cuota.prestamo.cliente.administradorId;
 
     const yaNotificada = await prisma.notificacion.findFirst({
-      where: { usuarioId: adminId, cuotaId: cuota.id, tipo: 'COBRO_HOY_CLIENTE', createdAt: { gte: hoy } },
+      where: { usuarioId: adminId, cuotaId: cuota.id, tipo: 'COBRO_HOY_CLIENTE', createdAt: { gte: desde } },
       select: { id: true },
     });
     if (yaNotificada) continue;
