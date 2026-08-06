@@ -205,6 +205,26 @@ test('RF-26: un cliente sin cuenta de acceso no genera recordatorios (no debe re
   }
 });
 
+test('RF-28: aviso puntual al admin por cliente con cobro hoy (nombre y monto) y es idempotente', async () => {
+  const prestamo = await crearPrestamo();
+  const [cuota1] = await cuotasDe(prestamo.id);
+
+  const hoy = new Date();
+  hoy.setUTCHours(0, 0, 0, 0);
+  await prisma.cuota.update({ where: { id: cuota1.id }, data: { fechaVencimiento: hoy } });
+
+  const creadas = await notificacionesService.generarCobrosHoyPorCliente(hoy);
+  assert.ok(creadas >= 1);
+
+  const notifs = await notificacionesDe(admin.id);
+  const aviso = notifs.find((n) => n.tipo === 'COBRO_HOY_CLIENTE' && n.cuotaId === cuota1.id);
+  assert.ok(aviso);
+  assert.match(aviso.mensaje, /le toca pagar a Test Notif el monto de S\/ /);
+
+  const segundaVuelta = await notificacionesService.generarCobrosHoyPorCliente(hoy);
+  assert.equal(segundaVuelta, 0);
+});
+
 test('RF-28: resumen diario del administrador y es idempotente', async () => {
   // generarResumenAdmin notifica a TODOS los administradores activos de la
   // base de datos, no solo al `admin` de esta prueba — incluye al

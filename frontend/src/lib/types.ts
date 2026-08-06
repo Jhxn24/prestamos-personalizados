@@ -328,7 +328,8 @@ export type TipoNotificacion =
   | "PAGO_CONFIRMADO"
   | "PAGO_RECHAZADO"
   | "PAGO_ANULADO"
-  | "RESUMEN_DIARIO_ADMIN";
+  | "RESUMEN_DIARIO_ADMIN"
+  | "COBRO_HOY_CLIENTE";
 
 /** GET /api/notificaciones — notificaciones.dto.js:notificacionDTO. */
 export interface Notificacion {

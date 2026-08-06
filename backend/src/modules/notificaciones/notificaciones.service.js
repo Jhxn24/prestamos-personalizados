@@ -219,6 +219,66 @@ async function generarResumenAdmin(fechaReferencia = new Date()) {
   return creadas;
 }
 
+/**
+ * RF-28: además del resumen agregado, un aviso puntual al administrador por
+ * cada cliente que tiene una cuota venciendo hoy, con nombre y monto —
+ * "Hoy <fecha> le toca pagar a <cliente> el monto de S/ <monto>."
+ *
+ * Una notificación por cuota (idempotente por cuota+día, igual que el resto
+ * del barrido), agrupada bajo el administrador propietario de esa cartera.
+ */
+async function generarCobrosHoyPorCliente(fechaReferencia = new Date()) {
+  const hoy = inicioDelDiaUTC(fechaReferencia);
+  const finHoy = agregarDias(hoy, 1);
+  const fechaTexto = formatearFechaCorta(hoy);
+
+  const cuotas = await prisma.cuota.findMany({
+    where: {
+      estado: { in: ['PENDIENTE', 'PARCIAL'] },
+      fechaVencimiento: { gte: hoy, lt: finHoy },
+      prestamo: { estado: 'ACTIVO' },
+    },
+    select: {
+      id: true,
+      total: true,
+      montoPagado: true,
+      prestamoId: true,
+      prestamo: {
+        select: {
+          cliente: { select: { nombre: true, apellido: true, administradorId: true } },
+        },
+      },
+    },
+  });
+
+  let creadas = 0;
+
+  for (const cuota of cuotas) {
+    const adminId = cuota.prestamo.cliente.administradorId;
+
+    const yaNotificada = await prisma.notificacion.findFirst({
+      where: { usuarioId: adminId, cuotaId: cuota.id, tipo: 'COBRO_HOY_CLIENTE', createdAt: { gte: hoy } },
+      select: { id: true },
+    });
+    if (yaNotificada) continue;
+
+    const montoPendiente = dec(cuota.total).minus(dec(cuota.montoPagado)).toFixed(2);
+    const nombreCliente = `${cuota.prestamo.cliente.nombre} ${cuota.prestamo.cliente.apellido}`;
+
+    await crear({
+      usuarioId: adminId,
+      tipo: 'COBRO_HOY_CLIENTE',
+      titulo: 'Cobro de hoy',
+      mensaje: `Hoy ${fechaTexto} le toca pagar a ${nombreCliente} el monto de S/ ${montoPendiente}.`,
+      prestamoId: cuota.prestamoId,
+      cuotaId: cuota.id,
+    });
+    creadas++;
+  }
+
+  return creadas;
+}
+
 module.exports = {
   crear,
   registrarPushToken,
@@ -228,4 +288,5 @@ module.exports = {
   marcarTodasLeidas,
   generarRecordatoriosVencimiento,
   generarResumenAdmin,
+  generarCobrosHoyPorCliente,
 };

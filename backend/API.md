@@ -486,7 +486,9 @@ Las últimas 100 notificaciones del usuario autenticado, más nuevas primero.
 
 `tipo` es uno de: `CUOTA_POR_VENCER_SEMANA`, `CUOTA_POR_VENCER_DIA`,
 `CUOTA_VENCE_HOY` (RF-26); `PAGO_CONFIRMADO` (RF-27, al registrar un pago);
-`PAGO_ANULADO` (al anular uno); `RESUMEN_DIARIO_ADMIN` (RF-28).
+`PAGO_ANULADO` (al anular uno); `RESUMEN_DIARIO_ADMIN` (RF-28, resumen
+agregado); `COBRO_HOY_CLIENTE` (RF-28, un aviso por cada cliente que le toca
+pagar hoy, con nombre y monto).
 `PAGO_REPORTADO` y `PAGO_RECHAZADO` son valores legado del enum, ya no se
 producen (el cliente ya no autorreporta pagos).
 

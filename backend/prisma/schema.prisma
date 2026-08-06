@@ -322,6 +322,7 @@ enum TipoNotificacion {
   PAGO_RECHAZADO          // legado, ya no se produce
   PAGO_ANULADO            // el admin anuló un pago marcado por error (para el cliente)
   RESUMEN_DIARIO_ADMIN    // RF-28: cobros del día/semana, morosos, pendientes
+  COBRO_HOY_CLIENTE       // RF-28: aviso puntual al admin por cada cliente que le toca pagar hoy
 }
 
 model Notificacion {
