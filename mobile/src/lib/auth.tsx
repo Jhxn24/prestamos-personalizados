@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { apiFetch } from "./api";
+import { registrarPushToken } from "./push-notifications";
 import * as SecureStorage from "./secure-storage";
 import type { LoginResponse, Usuario } from "./types";
 
@@ -50,6 +51,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     restaurarSesion();
   }, []);
+
+  // Registra el token de push apenas hay sesión (login fresco o restaurada),
+  // no solo en `login`: si no, un usuario que ya estaba logueado al abrir la
+  // app nunca quedaría suscrito a push.
+  useEffect(() => {
+    if (token) {
+      registrarPushToken(token);
+    }
+  }, [token]);
 
   async function login(email: string, password: string) {
     const respuesta = await apiFetch<LoginResponse>("/api/auth/login", {

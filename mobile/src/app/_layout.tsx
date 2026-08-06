@@ -1,11 +1,13 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider } from 'expo-router';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
+import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { ThemedView } from '@/components/themed-view';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import '@/lib/push-notifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -42,8 +44,19 @@ function RootNavigator() {
   );
 }
 
+/** Tocar un push (con la app cerrada o en segundo plano) lleva a la pestaña de Avisos. */
+function useAbrirAvisosAlTocarPush() {
+  useEffect(() => {
+    const suscripcion = Notifications.addNotificationResponseReceivedListener(() => {
+      router.push('/notificaciones');
+    });
+    return () => suscripcion.remove();
+  }, []);
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  useAbrirAvisosAlTocarPush();
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

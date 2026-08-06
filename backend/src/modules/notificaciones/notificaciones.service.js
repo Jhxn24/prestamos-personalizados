@@ -1,6 +1,7 @@
 const Decimal = require('decimal.js');
 const prisma = require('../../config/prisma');
 const { agregarDias } = require('../motor-calculo/fechas');
+const pushService = require('./push.service');
 
 const dec = (valor) => new Decimal(valor.toString());
 
@@ -14,9 +15,14 @@ function formatearFechaCorta(fecha) {
   return new Date(fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 }
 
-/** Crea una notificación para un usuario puntual. */
-function crear({ usuarioId, tipo, titulo, mensaje, prestamoId, cuotaId, pagoId }) {
-  return prisma.notificacion.create({
+/**
+ * Crea una notificación para un usuario puntual y, si tiene algún
+ * dispositivo registrado, le manda además el push de verdad (llega aunque
+ * no tenga la app abierta). El push es best-effort: si falla, la
+ * notificación en la app ya quedó guardada de todos modos.
+ */
+async function crear({ usuarioId, tipo, titulo, mensaje, prestamoId, cuotaId, pagoId }) {
+  const notificacion = await prisma.notificacion.create({
     data: {
       usuarioId,
       tipo,
@@ -26,6 +32,23 @@ function crear({ usuarioId, tipo, titulo, mensaje, prestamoId, cuotaId, pagoId }
       cuotaId: cuotaId ?? null,
       pagoId: pagoId ?? null,
     },
+  });
+
+  await pushService.enviarPush(usuarioId, {
+    titulo,
+    mensaje,
+    data: { tipo, notificacionId: notificacion.id, prestamoId, cuotaId, pagoId },
+  });
+
+  return notificacion;
+}
+
+/** Registra (o reasigna) el token de push de Expo del dispositivo actual. */
+function registrarPushToken(usuarioId, token) {
+  return prisma.pushToken.upsert({
+    where: { token },
+    create: { usuarioId, token },
+    update: { usuarioId },
   });
 }
 
@@ -219,6 +242,7 @@ async function generarResumenAdmin(fechaReferencia = new Date()) {
 module.exports = {
   crear,
   crearParaAdministradores,
+  registrarPushToken,
   listar,
   contarNoLeidas,
   marcarLeida,

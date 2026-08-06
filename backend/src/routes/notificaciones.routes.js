@@ -10,6 +10,7 @@ router.get('/', notificacionesController.listar);
 router.get('/no-leidas/contador', notificacionesController.contador);
 router.post('/leer-todas', notificacionesController.marcarTodasLeidas);
 router.post('/:id/leer', notificacionesController.marcarLeida);
+router.post('/push-token', notificacionesController.registrarPushToken);
 
 // Barrido diario (RF-26, RF-28): solo administrador puede forzarlo.
 router.post('/generar', requireRol('ADMINISTRADOR'), notificacionesController.generar);

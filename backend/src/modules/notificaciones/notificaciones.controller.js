@@ -42,6 +42,20 @@ async function marcarTodasLeidas(req, res, next) {
   }
 }
 
+// Registra el token de push de Expo de este dispositivo (cualquier rol).
+async function registrarPushToken(req, res, next) {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ error: 'token es obligatorio' });
+    }
+    await notificacionesService.registrarPushToken(req.usuario.id, token);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+}
+
 // Disparo manual del barrido diario (RF-26, RF-28): el job programado lo
 // corre solo, pero el administrador puede forzarlo (backfill, pruebas, o si
 // el proceso estuvo caído a la hora programada).
@@ -58,4 +72,4 @@ async function generar(req, res, next) {
   }
 }
 
-module.exports = { listar, contador, marcarLeida, marcarTodasLeidas, generar };
+module.exports = { listar, contador, marcarLeida, marcarTodasLeidas, registrarPushToken, generar };

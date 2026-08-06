@@ -31,6 +31,22 @@ model Usuario {
   pagosAnulados    Pago[] @relation("PagosAnulados")
   notificaciones   Notificacion[]
   registrosAuditoria RegistroAuditoria[]
+  pushTokens       PushToken[]
+}
+
+// Token de push de Expo por dispositivo. Un usuario puede tener varios (más
+// de un celular); un mismo token es único (si se reinstala la app con otra
+// cuenta en el mismo dispositivo, el upsert lo reasigna al usuario nuevo).
+model PushToken {
+  id String @id @default(uuid())
+
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+
+  token     String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([usuarioId])
 }
 
 model Cliente {

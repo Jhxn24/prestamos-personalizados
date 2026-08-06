@@ -6,14 +6,15 @@ que el frontend web — ver [`../backend/API.md`](../backend/API.md).
 
 Alcance actual:
 
-- **Cliente**: login, dashboard (capital/interés pendiente, próximo pago,
-  estado, cronograma e historial — RF-30), reportar un pago (RF-21) y ver
-  notificaciones (RF-26/27/28).
-- **Administrador**: resumen del negocio (RF-29); gestión de clientes (alta,
-  edición, baja — RF-01/02) y de préstamos (alta con simulación previa,
-  cronograma, recalcular, refinanciar — RF-05 a RF-09); registrar/confirmar/
-  rechazar pagos (RF-23/25); ver clientes morosos; y sus propias notificaciones
-  (RF-26/27/28).
+- **Cliente**: login (opcional — RF-04), dashboard (capital/interés
+  pendiente, próximo pago, estado, cronograma e historial — RF-30) y avisos,
+  como notificación push del sistema operativo (RF-26/27/28/39).
+- **Administrador**: resumen del negocio (RF-29); gestión de clientes (alta
+  con o sin cuenta de acceso, edición, baja, generar acceso después —
+  RF-01/02/04) y de préstamos (alta con simulación previa, cronograma,
+  recalcular, refinanciar — RF-05 a RF-09); marcar/anular pagos (RF-25); ver
+  clientes morosos; borrado masivo de datos (RF-38); y sus propias
+  notificaciones push (RF-26/27/28/39).
 
 No incluye (queda para una siguiente pasada): reportes exportables (RF-31/32),
 adjuntar documentos (RF-03/33), auditoría (RF-36 — sí existe en backend/web),
@@ -85,6 +86,39 @@ su propio negocio" en el README raíz) necesita su propio build con su propia
 `EXPO_PUBLIC_API_URL` — o, más simple y sin compilar nada, puede usar Expo Go
 apuntando a su propia URL.
 
+## Notificaciones push (RF-39)
+
+Los avisos (RF-26/27/28) llegan como notificación push real —con la app
+cerrada— además de aparecer en la pestaña Avisos. La app pide permiso y
+registra el token solo (ver `src/lib/push-notifications.ts`); no hay nada
+que tocar en el código para que esto funcione, **pero en Android hace falta
+un proyecto de Firebase vinculado** antes de que un push llegue de verdad.
+Sin esto, el registro del token falla en silencio (no rompe nada, solo no
+hay push) — se puede hacer en cualquier momento, no bloquea el resto de la app.
+
+1. Crea un proyecto en [Firebase Console](https://console.firebase.google.com/)
+   (el plan gratis alcanza).
+2. Agrega una app Android con el package name exacto de `app.json`
+   (`android.package`, hoy `com.sistemaprestamos.app`).
+3. Descarga el `google-services.json` que te da Firebase y ponlo en
+   `mobile/google-services.json`.
+4. Agrega la referencia en `app.json`, dentro de `expo.android`:
+   ```json
+   "googleServicesFile": "./google-services.json"
+   ```
+5. En Firebase: ⚙️ *Configuración del proyecto* → pestaña *Cuentas de
+   servicio* → *Generar nueva clave privada* (JSON) — esto es lo que EAS
+   necesita para mandar el push en tu nombre, es un archivo distinto al
+   `google-services.json`.
+6. Súbelo a EAS:
+   ```bash
+   npx eas credentials
+   # Android → seleccionar el perfil → Push Notifications → Upload a new key
+   ```
+7. Vuelve a compilar el APK (`npx eas build --platform android --profile preview`)
+   — el `google-services.json` se empaqueta en el build, así que un APK
+   compilado antes de este paso no tendrá push funcionando.
+
 ## Estructura
 
 ```
@@ -92,16 +126,17 @@ src/
   app/
     _layout.tsx      # rutas protegidas por sesión y rol (Stack.Protected)
     login.tsx
-    (cliente)/        # tabs: Mi préstamo, Pagos, Avisos
+    (cliente)/        # tabs: Mi préstamo, Avisos
     (admin)/           # tabs: Resumen, Clientes, Préstamos, Pagos, Avisos
       clientes/         # stack anidado: lista, nuevo, [id]
       prestamos/         # stack anidado: lista, nuevo, [id], morosos
-  lib/                # cliente API (fetch + Bearer token) y tipos, en
-                       # paralelo a frontend/src/lib — mismo contrato de API
+  lib/                # cliente API (fetch + Bearer token), tipos y push
+                       # notifications, en paralelo a frontend/src/lib —
+                       # mismo contrato de API
   components/
     ui/                # Button, Card, Badge, TextField, Screen, ChipSelect
-    pagos/              # modales compartidos (registrar/rechazar pago)
-    clientes/           # selector de cliente (modal con búsqueda)
+    pagos/              # modales compartidos (registrar/anular pago)
+    clientes/           # selector de cliente, generar acceso (modal)
     prestamos/           # campos de condiciones del préstamo (compartido
                           # entre alta, recalcular y refinanciar)
     notificaciones-screen.tsx   # pantalla compartida entre cliente y admin

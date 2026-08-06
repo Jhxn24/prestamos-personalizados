@@ -422,9 +422,10 @@ eliminaron después.
 ## Notificaciones — `/api/notificaciones`
 
 Avisos en la app para RF-26 (recordatorios de vencimiento), RF-27 (estado del
-pago del cliente) y RF-28 (avisos al administrador). No hay email/push: son
-filas en la tabla `Notificacion` que cada rol consulta con su propio token
-(RNF-05 — un cliente solo ve las suyas).
+pago del cliente) y RF-28 (avisos al administrador). Son filas en la tabla
+`Notificacion` que cada rol consulta con su propio token (RNF-05 — un cliente
+solo ve las suyas), y además —si el dispositivo registró un token— se manda
+un push real (Expo Push API) que llega aunque la app esté cerrada.
 
 Se generan de dos formas:
 
@@ -434,6 +435,31 @@ Se generan de dos formas:
 - **Por barrido diario**, vía `node-cron` (`src/jobs/notificaciones.job.js`),
   todos los días a las 08:00 hora del servidor. El barrido es idempotente: no
   duplica avisos si se corre más de una vez el mismo día.
+
+### `POST /api/notificaciones/push-token`
+
+Registra (o reasigna) el token de push de Expo del dispositivo actual —
+la app móvil lo llama sola después de loguear o al restaurar sesión, no hace
+falta wiring manual. `upsert` por `token`: si el mismo token ya era de otro
+usuario (reinstaló la app con otra cuenta en el mismo celular), se reasigna.
+
+```json
+// request
+{ "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]" }
+```
+
+`204` sin cuerpo. `400` si falta `token`.
+
+Cuando `notificaciones.service.js` crea un aviso (`crear()`), manda el push a
+todos los tokens del usuario. Es best-effort a propósito: si Expo no
+responde, o el token quedó inválido (`DeviceNotRegistered`, el token se borra
+solo), nunca revienta la operación de negocio que lo disparó — el aviso ya
+quedó guardado en la tabla de todos modos y se puede ver dentro de la app.
+
+Requiere que el proyecto de Expo tenga credenciales de Firebase Cloud
+Messaging cargadas en EAS (`eas credentials`) y `google-services.json` en
+`mobile/` — sin eso, `getExpoPushTokenAsync()` en el celular falla en
+silencio y no hay token que registrar. Ver `mobile/README.md`.
 
 ### `GET /api/notificaciones`
 
