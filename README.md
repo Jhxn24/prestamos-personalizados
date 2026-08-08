@@ -1,15 +1,29 @@
+
 # Sistema Inteligente de Gestión de Préstamos
 
-Monorepo para una plataforma de gestión de préstamos (registro de clientes,
-cronogramas dinámicos, pagos, mora y dashboard). Ver `backend/API.md` para el
-detalle de los endpoints REST.
+Plataforma multi-tenant para la gestión integral de préstamos: registro de clientes, generación de cronogramas dinámicos, control de pagos y mora, y dashboard con reportes. Cada administrador que se registra maneja su propia cartera de clientes, completamente aislada de la de otros administradores en la misma base de datos.
 
-Estado actual: el **backend** (Node.js + Express + Prisma + PostgreSQL) está
-implementado. El **frontend web** (Next.js) cubre clientes, préstamos, pagos,
-dashboard, reportes, notificaciones y auditoría. La **app móvil** (React
-Native + Expo Router) cubre login, dashboard/cronograma/pagos/notificaciones
-para el cliente, y gestión de clientes/préstamos, pagos y notificaciones para
-el administrador — ver [`mobile/README.md`](mobile/README.md).
+## Funcionalidades
+
+- Registro y gestión de clientes y préstamos.
+- Generación automática de cronogramas de pago dinámicos.
+- Control de pagos y seguimiento de mora.
+- Dashboard con reportes y auditoría.
+- Notificaciones para clientes y administradores.
+- Registro de administradores multi-tenant, sin límite de cuentas, con datos completamente aislados entre negocios.
+- App móvil para clientes (login, cronograma, pagos, notificaciones) y administradores (gestión de clientes/préstamos, pagos, notificaciones).
+
+## Stack técnico
+
+- **Backend:** Node.js, Express, Prisma, PostgreSQL, JWT
+- **Frontend web:** Next.js
+- **App móvil:** React Native, Expo Router
+- **Despliegue:** Railway
+
+## Documentación adicional
+
+- `backend/API.md` — detalle de endpoints REST.
+- `mobile/README.md` — configuración e instalación de la app móvil.
 
 ## Requisitos previos
 
